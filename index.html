@@ -1496,13 +1496,37 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             console.error('Failed to log quote to server:', e);
           }
         }
+        const savedQuote = { ...finalQuote, _id: Date.now().toString(), createdAt: new Date().toISOString() };
         if (isNew) {
-          setData({ ...data, quotes: [{ ...finalQuote, _id: Date.now().toString(), createdAt: new Date().toISOString() }, ...data.quotes] });
+          setData({ ...data, quotes: [savedQuote, ...data.quotes] });
         } else {
           setData({ ...data, quotes: data.quotes.map(x => x._id === editQuote._id ? { ...x, ...finalQuote, updatedAt: new Date().toISOString() } : x) });
         }
         setShowForm(false); setEditQuote(null); setCalcRate(null);
-        if (send) alert('Quote saved! Email integration requires Brevo setup.');
+
+        if (send) {
+          const toEmail = finalQuote.customerSnapshot?.contactEmail;
+          if (!toEmail) {
+            alert('Quote saved as draft — no email address on file for this customer. Add one in the Customers tab then re-send.');
+            return;
+          }
+          try {
+            const emailRes = await fetch('https://texasgotrocks.com/.netlify/functions/tcq-send-quote', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ quote: finalQuote })
+            });
+            const emailData = await emailRes.json();
+            if (emailData.success) {
+              alert(`Quote sent to ${toEmail}`);
+            } else {
+              alert(`Quote saved, but email failed: ${emailData.error || 'Unknown error'}`);
+            }
+          } catch (e) {
+            console.error('Email send failed:', e);
+            alert('Quote saved, but email could not be sent. Check your connection.');
+          }
+        }
       };
 
       const revise = (q) => { setEditQuote({ ...q, _id: null, revisionNumber: (q.revisionNumber || 0) + 1, status: 'draft', previousVersionId: q._id }); setShowForm(true); };
