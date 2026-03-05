@@ -961,12 +961,12 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
     // ============================================
     // QUOTE PREVIEW - Combines bundled items for customer view
     // ============================================
-    const QuotePreview = ({ quote, onClose, onSign, onSend }) => {
+    const QuotePreview = ({ quote, onClose, onSign, onSend, startSigning = false }) => {
       const [tcSignature, setTcSignature] = useState(quote.tcSignature || '');
       const [tcSignDate, setTcSignDate] = useState(quote.tcSignDate || '');
       const [customerSignature, setCustomerSignature] = useState(quote.customerSignature || '');
       const [customerSignDate, setCustomerSignDate] = useState(quote.customerSignDate || '');
-      const [showSigningPanel, setShowSigningPanel] = useState(false);
+      const [showSigningPanel, setShowSigningPanel] = useState(startSigning && !quote.tcSignature);
       const [isSigned, setIsSigned] = useState(!!(quote.tcSignature));
 
       if (!quote) return null;
@@ -1028,54 +1028,53 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="bg-tc-blue text-white p-4 flex justify-between items-center">
-              <h3 className="font-bold">Quote Preview - {quote.quoteNumber} <span className="text-sm font-normal opacity-75">(Customer View)</span></h3>
+            <div className="bg-tc-blue text-white p-4 flex justify-between items-center no-print">
+              <h3 className="font-bold">Quote Preview — {quote.quoteNumber} <span className="text-sm font-normal opacity-75">(Customer View)</span></h3>
               <div className="flex gap-2">
-                {/* Show Sign button only if not signed and onSign is available */}
-                {onSign && !isSigned && (
-                  <button onClick={() => setShowSigningPanel(!showSigningPanel)} className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 text-sm">
-                    <Icons.Edit /> Sign
-                  </button>
-                )}
-                {/* Always show Print */}
-                <button onClick={() => window.print()} className="px-3 py-1 bg-white text-tc-blue rounded hover:bg-gray-100 flex items-center gap-1 text-sm">
+                <button onClick={() => window.print()} className="px-3 py-1.5 bg-white bg-opacity-20 text-white rounded hover:bg-opacity-30 flex items-center gap-1 text-sm">
                   <Icons.Printer /> Print
                 </button>
-                {/* Show Save & Send after signing */}
-                {isSigned && onSend && (
-                  <button onClick={handleSendQuote} className="px-3 py-1 bg-tc-orange text-white rounded hover:bg-orange-600 flex items-center gap-1 text-sm">
-                    <Icons.Send /> Save & Send
-                  </button>
-                )}
-                <button onClick={onClose} className="hover:text-gray-300"><Icons.X /></button>
+                <button onClick={onClose} className="p-1 hover:text-gray-300"><Icons.X /></button>
               </div>
             </div>
-            
-            {/* Signing Panel */}
-            {showSigningPanel && onSign && !isSigned && (
-              <div className="bg-green-50 border-b border-green-200 p-4 no-print">
-                <h4 className="font-semibold text-green-800 mb-3">Sign Quote Before Sending</h4>
-                <div className="grid grid-cols-2 gap-4">
+
+            {/* Signing Panel — shown when startSigning or user clicks sign */}
+            {onSign && !isSigned && (
+              <div className="no-print" style={{background:'#f0fdf4', borderBottom:'3px solid #16a34a', padding:'20px 24px'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px'}}>
+                  <h4 style={{margin:0, fontSize:'15px', fontWeight:800, color:'#15803d'}}>Sign Quote</h4>
+                  <p style={{margin:0, fontSize:'12px', color:'#4b7280'}}>Your signature will appear on the quote sent to the customer.</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">T&C Materials Signature</label>
-                    <input type="text" value={tcSignature} onChange={(e) => setTcSignature(e.target.value)} placeholder="Type your name to sign" className="w-full border border-gray-300 rounded px-3 py-2 text-sm italic" style={{fontFamily: 'cursive'}} />
-                    <label className="block text-xs font-semibold text-gray-700 mb-1 mt-2">Date</label>
-                    <input type="date" value={tcSignDate || today} onChange={(e) => setTcSignDate(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+                    <label className="field-label" style={{color:'#166534'}}>T&C Materials Signature</label>
+                    <input type="text" value={tcSignature} onChange={(e) => setTcSignature(e.target.value)} placeholder="Type your full name to sign" className="field-input" style={{fontStyle:'italic', fontFamily:'cursive', fontSize:'1.05rem'}} />
                   </div>
-                  <div className="flex flex-col justify-between">
-                    <p className="text-xs text-gray-600"><strong>Note:</strong> Your signature will appear on the quote sent to the customer.</p>
-                    <button onClick={handleSignAndSave} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium">
+                  <div>
+                    <label className="field-label" style={{color:'#166534'}}>Date</label>
+                    <input type="date" value={tcSignDate || today} onChange={(e) => setTcSignDate(e.target.value)} className="field-input" />
+                  </div>
+                  <div style={{display:'flex', alignItems:'flex-end'}}>
+                    <button onClick={handleSignAndSave} style={{width:'100%', minHeight:'48px', background:'#16a34a', color:'#fff', border:'none', borderRadius:'10px', fontWeight:800, fontSize:'1rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px'}}>
                       <Icons.Check /> Apply Signature
                     </button>
                   </div>
                 </div>
               </div>
             )}
-            
-            {/* Signed confirmation banner */}
+
+            {/* Signed confirmation banner + big Send button */}
             {isSigned && (
-              <div className="bg-green-100 border-b border-green-300 p-2 text-center text-green-800 text-sm no-print">
-                <strong>✓ Signed by {tcSignature}</strong> on {tcSignDate || today} — Ready to send!
+              <div className="no-print" style={{background:'#dcfce7', borderBottom:'3px solid #16a34a', padding:'14px 24px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px'}}>
+                <div>
+                  <span style={{fontWeight:800, color:'#15803d', fontSize:'14px'}}>✓ Signed by {tcSignature}</span>
+                  <span style={{color:'#4b7280', fontSize:'13px', marginLeft:'8px'}}>on {tcSignDate || today}</span>
+                </div>
+                {onSend && (
+                  <button onClick={handleSendQuote} style={{minHeight:'48px', padding:'0 28px', background:'#f97316', color:'#fff', border:'none', borderRadius:'10px', fontWeight:800, fontSize:'1rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px'}}>
+                    <Icons.Send /> Save &amp; Send Quote
+                  </button>
+                )}
               </div>
             )}
 
@@ -1180,6 +1179,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
       const [selectedCustomer, setSelectedCustomer] = useState(quote?.customerId ? customers.find(c => c._id === quote.customerId) : null);
       const [showPreview, setShowPreview] = useState(false);
+      const [previewStartSigning, setPreviewStartSigning] = useState(false);
 
       // Handle calculator rate being applied - add as new line item with auto-bundle
       useEffect(() => {
@@ -1230,10 +1230,10 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
           <div className="bg-white rounded-xl shadow-sm px-6 py-4 mb-5" style={{display:'flex', flexWrap:'wrap', gap:'12px', justifyContent:'space-between', alignItems:'center'}}>
             <div>
               <h2 className="text-xl font-extrabold text-tc-blue">{quote?._id ? 'Edit Quote' : 'New Quote'} <span className="text-tc-orange">#{formData.quoteNumber}</span>{formData.revisionNumber > 0 && <span className="text-tc-orange ml-2 text-sm">(Rev {formData.revisionNumber})</span>}</h2>
-              <p className="text-sm text-gray-500 mt-0.5">Fill in each section below, then Save Draft or Send.</p>
+              <p className="text-sm text-gray-500 mt-0.5">Fill in each section below, then Save Draft or Review &amp; Sign to send.</p>
             </div>
             <div style={{display:'flex', gap:'10px', flex:'1 1 auto', justifyContent:'flex-end'}}>
-              <button onClick={() => setShowPreview(true)} style={{flex:'1 1 0', minWidth:'120px', maxWidth:'180px', minHeight:'52px', fontSize:'1rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', border:'2px solid #d1d5db', borderRadius:'10px', background:'#fff', color:'#374151', cursor:'pointer'}}><Icons.Eye /> Preview</button>
+              <button onClick={() => { setPreviewStartSigning(false); setShowPreview(true); }} style={{flex:'1 1 0', minWidth:'120px', maxWidth:'180px', minHeight:'52px', fontSize:'1rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', border:'2px solid #d1d5db', borderRadius:'10px', background:'#fff', color:'#374151', cursor:'pointer'}}><Icons.Eye /> Preview</button>
               <button onClick={onShowCalc} style={{flex:'1 1 0', minWidth:'120px', maxWidth:'180px', minHeight:'52px', fontSize:'1rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', border:'none', borderRadius:'10px', background:'#1e3a5f', color:'#fff', cursor:'pointer'}}><Icons.Calculator /> Haul Rate</button>
             </div>
           </div>
@@ -1313,11 +1313,11 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             <button onClick={onCancel} className="px-5 py-2.5 border-2 border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
             <div className="flex gap-3">
               <button onClick={() => handleSave(false)} className="flex items-center gap-2 px-5 py-2.5 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800"><Icons.Save /> Save Draft</button>
-              <button onClick={() => handleSave(true)} className="flex items-center gap-2 px-6 py-2.5 bg-tc-orange text-white rounded-lg font-bold hover:bg-orange-600"><Icons.Send /> Save &amp; Send</button>
+              <button onClick={() => { setPreviewStartSigning(true); setShowPreview(true); }} className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700"><Icons.Edit /> Review &amp; Sign</button>
             </div>
           </div>
 
-          {showPreview && <QuotePreview quote={{ ...formData, subtotal }} onClose={() => setShowPreview(false)} onSign={(sigData) => setFormData({ ...formData, ...sigData })} onSend={(sigData) => { setFormData({ ...formData, ...sigData }); handleSave(true); }} />}
+          {showPreview && <QuotePreview quote={{ ...formData, subtotal }} startSigning={previewStartSigning} onClose={() => { setShowPreview(false); setPreviewStartSigning(false); }} onSign={(sigData) => setFormData({ ...formData, ...sigData })} onSend={(sigData) => { setFormData({ ...formData, ...sigData }); handleSave(true); }} />}
         </div>
       );
     };
