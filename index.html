@@ -1340,49 +1340,78 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[s] || styles.draft}`}>{s}</span>;
       };
 
+      const summaryStats = [
+        { label: 'Total Quotes', value: quotes.length, color: '#1e3a5f' },
+        { label: 'Drafts', value: quotes.filter(q => q.status === 'draft').length, color: '#6b7280' },
+        { label: 'Sent', value: quotes.filter(q => q.status === 'sent').length, color: '#2563eb' },
+        { label: 'Total Value', value: formatCurrency(quotes.reduce((s, q) => s + (q.subtotal || 0), 0)), color: '#f97316' },
+      ];
+
       return (
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-4 border-b flex flex-wrap gap-3 items-center">
-            <div className="flex-1 min-w-64 relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Icons.Search /></span>
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search quotes..." className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
-            </div>
-            <button onClick={onNew} className="flex items-center gap-1 px-4 py-2 bg-tc-orange text-white rounded-lg hover:bg-orange-600 text-sm"><Icons.Plus /> New Quote</button>
+        <div style={{maxWidth:'900px', margin:'0 auto'}}>
+
+          {/* Summary bar */}
+          <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'20px'}}>
+            {summaryStats.map(s => (
+              <div key={s.label} style={{background:'#fff', borderRadius:'12px', padding:'16px 20px', boxShadow:'0 1px 4px rgba(0,0,0,0.07)', borderLeft:`4px solid ${s.color}`}}>
+                <p style={{margin:'0 0 4px', fontSize:'11px', fontWeight:700, letterSpacing:'0.06em', textTransform:'uppercase', color:'#9ca3af'}}>{s.label}</p>
+                <p style={{margin:0, fontSize:'22px', fontWeight:800, color:s.color}}>{s.value}</p>
+              </div>
+            ))}
           </div>
+
+          {/* Search + New Quote */}
+          <div style={{display:'flex', gap:'12px', marginBottom:'16px', flexWrap:'wrap'}}>
+            <div style={{flex:'1', minWidth:'200px', position:'relative'}}>
+              <span style={{position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', color:'#9ca3af'}}><Icons.Search /></span>
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by quote #, project, or customer..." className="field-input" style={{paddingLeft:'40px'}} />
+            </div>
+            <button onClick={onNew} style={{minHeight:'48px', padding:'0 24px', background:'#f97316', color:'#fff', border:'none', borderRadius:'10px', fontWeight:800, fontSize:'1rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', whiteSpace:'nowrap'}}>
+              <Icons.Plus /> New Quote
+            </button>
+          </div>
+
+          {/* Quote cards */}
           {filtered.length === 0 ? (
-            <div className="p-8 text-center text-gray-500">No quotes found. Create your first quote!</div>
+            <div style={{background:'#fff', borderRadius:'12px', padding:'60px 20px', textAlign:'center', color:'#9ca3af', boxShadow:'0 1px 4px rgba(0,0,0,0.07)'}}>
+              <div style={{fontSize:'48px', marginBottom:'12px'}}>📄</div>
+              <p style={{fontWeight:700, fontSize:'16px', color:'#6b7280', margin:'0 0 4px'}}>No quotes yet</p>
+              <p style={{margin:0, fontSize:'13px'}}>Click "New Quote" to create your first one.</p>
+            </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-tc-blue text-white">
-                  <tr><th className="py-2 px-3 text-left">Quote #</th><th className="py-2 px-3 text-left">Customer</th><th className="py-2 px-3 text-left">Project</th><th className="py-2 px-3 text-right">Amount</th><th className="py-2 px-3 text-center">Status</th><th className="py-2 px-3 text-left">Date</th><th className="py-2 px-3 text-center">Actions</th></tr>
-                </thead>
-                <tbody>
-                  {filtered.map(q => (
-                    <tr key={q._id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewQuote(q)}>
-                      <td className="py-2 px-3 font-medium">{q.quoteNumber}{q.revisionNumber > 0 && <span className="text-tc-orange">(R{q.revisionNumber})</span>}</td>
-                      <td className="py-2 px-3">{q.customerSnapshot?.shortName}</td>
-                      <td className="py-2 px-3">{q.projectName}</td>
-                      <td className="py-2 px-3 text-right font-medium">{formatCurrency(q.subtotal)}</td>
-                      <td className="py-2 px-3 text-center">{statusBadge(q.status)}</td>
-                      <td className="py-2 px-3 text-xs">{formatDate(q.bidDate)}</td>
-                      <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                        <button onClick={() => setPreviewQuote(q)} className="p-1 text-gray-500 hover:text-blue-600"><Icons.Eye /></button>
-                        <button onClick={() => onEdit(q)} className="p-1 text-gray-500 hover:text-green-600"><Icons.Edit /></button>
-                        <button onClick={() => onRevise(q)} className="p-1 text-gray-500 hover:text-tc-orange"><Icons.Copy /></button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
+              {filtered.map(q => (
+                <div key={q._id} style={{background:'#fff', borderRadius:'12px', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.07)', border:'2px solid #f3f4f6', cursor:'pointer', transition:'border-color 0.15s'}}
+                  onClick={() => setPreviewQuote(q)}
+                  onMouseEnter={e => e.currentTarget.style.borderColor='#c7d2fe'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor='#f3f4f6'}>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:'12px'}}>
+                    {/* Left: main info */}
+                    <div style={{flex:'1', minWidth:'200px'}}>
+                      <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'6px'}}>
+                        <span style={{fontFamily:'monospace', fontWeight:800, fontSize:'15px', color:'#1e3a5f'}}>{q.quoteNumber}{q.revisionNumber > 0 && <span style={{color:'#f97316'}}> R{q.revisionNumber}</span>}</span>
+                        {statusBadge(q.status)}
+                        {q.tcSignature && <span style={{fontSize:'11px', fontWeight:700, color:'#16a34a', background:'#dcfce7', padding:'2px 8px', borderRadius:'20px'}}>✓ Signed</span>}
+                      </div>
+                      <p style={{margin:'0 0 2px', fontSize:'17px', fontWeight:700, color:'#111827'}}>{q.customerSnapshot?.companyName || q.customerSnapshot?.shortName || '—'}</p>
+                      <p style={{margin:0, fontSize:'13px', color:'#6b7280'}}>{q.projectName}</p>
+                    </div>
+                    {/* Right: amount + date + actions */}
+                    <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'8px'}}>
+                      <p style={{margin:0, fontSize:'24px', fontWeight:900, color:'#1e3a5f'}}>{formatCurrency(q.subtotal)}</p>
+                      <p style={{margin:0, fontSize:'12px', color:'#9ca3af'}}>{formatDate(q.bidDate)}</p>
+                      <div style={{display:'flex', gap:'6px'}} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setPreviewQuote(q)} style={{padding:'6px 12px', border:'1px solid #e5e7eb', borderRadius:'8px', background:'#fff', color:'#6b7280', cursor:'pointer', fontSize:'12px', fontWeight:600, display:'flex', alignItems:'center', gap:'4px'}}><Icons.Eye /> View</button>
+                        <button onClick={() => onEdit(q)} style={{padding:'6px 12px', border:'1px solid #e5e7eb', borderRadius:'8px', background:'#fff', color:'#16a34a', cursor:'pointer', fontSize:'12px', fontWeight:600, display:'flex', alignItems:'center', gap:'4px'}}><Icons.Edit /> Edit</button>
+                        <button onClick={() => onRevise(q)} style={{padding:'6px 12px', border:'1px solid #e5e7eb', borderRadius:'8px', background:'#fff', color:'#f97316', cursor:'pointer', fontSize:'12px', fontWeight:600, display:'flex', alignItems:'center', gap:'4px'}}><Icons.Copy /> Revise</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-          <div className="p-3 border-t bg-gray-50 grid grid-cols-4 gap-3 text-center text-xs">
-            <div><p className="text-gray-500">Total</p><p className="text-lg font-bold text-tc-blue">{quotes.length}</p></div>
-            <div><p className="text-gray-500">Drafts</p><p className="text-lg font-bold text-gray-600">{quotes.filter(q => q.status === 'draft').length}</p></div>
-            <div><p className="text-gray-500">Sent</p><p className="text-lg font-bold text-blue-600">{quotes.filter(q => q.status === 'sent').length}</p></div>
-            <div><p className="text-gray-500">Value</p><p className="text-lg font-bold text-tc-orange">{formatCurrency(quotes.reduce((s, q) => s + (q.subtotal || 0), 0))}</p></div>
-          </div>
+
           {previewQuote && <QuotePreview quote={previewQuote} onClose={() => setPreviewQuote(null)} />}
         </div>
       );
