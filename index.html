@@ -403,7 +403,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
             <div className="bg-tc-blue text-white p-4 flex justify-between items-center">
-              <h3 className="font-bold flex items-center gap-2"><Icons.Truck /> Truck Rate Calculator</h3>
+              <h3 className="font-bold flex items-center gap-2"><Icons.Truck /> Haul Rate Calculator</h3>
               <button onClick={onClose} className="hover:text-gray-300"><Icons.X /></button>
             </div>
             <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
@@ -1227,14 +1227,14 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       return (
         <div className="max-w-4xl mx-auto">
           {/* Header bar */}
-          <div className="bg-white rounded-xl shadow-sm px-6 py-4 mb-5 flex justify-between items-center">
+          <div className="bg-white rounded-xl shadow-sm px-6 py-4 mb-5" style={{display:'flex', flexWrap:'wrap', gap:'12px', justifyContent:'space-between', alignItems:'center'}}>
             <div>
               <h2 className="text-xl font-extrabold text-tc-blue">{quote?._id ? 'Edit Quote' : 'New Quote'} <span className="text-tc-orange">#{formData.quoteNumber}</span>{formData.revisionNumber > 0 && <span className="text-tc-orange ml-2 text-sm">(Rev {formData.revisionNumber})</span>}</h2>
               <p className="text-sm text-gray-500 mt-0.5">Fill in each section below, then Save Draft or Send.</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-semibold text-gray-700"><Icons.Eye /> Preview</button>
-              <button onClick={onShowCalc} className="flex items-center gap-2 px-4 py-2 bg-gray-100 border-2 border-gray-200 rounded-lg hover:bg-gray-200 text-sm font-semibold text-gray-700"><Icons.Calculator /> Truck Calc</button>
+            <div style={{display:'flex', gap:'10px', flex:'1 1 auto', justifyContent:'flex-end'}}>
+              <button onClick={() => setShowPreview(true)} style={{flex:'1 1 0', minWidth:'120px', maxWidth:'180px', minHeight:'52px', fontSize:'1rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', border:'2px solid #d1d5db', borderRadius:'10px', background:'#fff', color:'#374151', cursor:'pointer'}}><Icons.Eye /> Preview</button>
+              <button onClick={onShowCalc} style={{flex:'1 1 0', minWidth:'120px', maxWidth:'180px', minHeight:'52px', fontSize:'1rem', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', border:'none', borderRadius:'10px', background:'#1e3a5f', color:'#fff', cursor:'pointer'}}><Icons.Calculator /> Haul Rate</button>
             </div>
           </div>
 
