@@ -36,23 +36,108 @@
     body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
     @media print { .no-print { display: none !important; } }
     .quote-preview { font-family: 'Times New Roman', serif; }
+
+    /* ── Form field base styles ── */
+    .field-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #374151;
+      margin-bottom: 5px;
+    }
+    .field-input {
+      width: 100%;
+      border: 2px solid #d1d5db;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.9375rem;
+      color: #111827;
+      background: #fff;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      min-height: 46px;
+    }
+    .field-input:focus {
+      outline: none;
+      border-color: #1e3a5f;
+      box-shadow: 0 0 0 3px rgba(30,58,95,0.12);
+    }
+    .field-input::placeholder { color: #9ca3af; }
+
+    /* ── Section panel ── */
+    .form-section {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .form-section-title {
+      font-size: 0.8125rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #1e3a5f;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    /* ── Line item cards ── */
+    .line-item-card {
+      background: #fff;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .line-item-card:hover { border-color: #c7d2fe; box-shadow: 0 2px 8px rgba(30,58,95,0.07); }
+    .line-item-card.bundled { border-color: #fdba74; background: #fff7ed; }
+    .line-item-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .line-item-num {
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: #6b7280;
+      background: #f3f4f6;
+      border-radius: 20px;
+      padding: 3px 10px;
+    }
+    .line-item-total-display {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #1e3a5f;
+    }
+    .line-item-grid {
+      display: grid;
+      grid-template-columns: 2fr 2fr 1fr 1fr 1.2fr;
+      gap: 12px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .line-item-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 600px) {
+      .line-item-grid { grid-template-columns: 1fr; }
+    }
+
     /* Mobile touch improvements */
-    button, select, input { min-height: 44px; }
+    button, select, input, textarea { min-height: 44px; }
     @media (max-width: 768px) {
-      /* Sidebar: hidden by default on mobile */
       aside.mobile-hidden { width: 0 !important; padding: 0 !important; overflow: hidden !important; min-width: 0 !important; }
-      /* Hamburger: fixed top-left so it's always visible */
       #mobileMenuBtn { display: flex !important; }
-      /* Grid layouts collapse to single column */
       .grid-cols-2, .grid-cols-4, .md\:grid-cols-4, .md\:grid-cols-2, .md\:grid-cols-3 { grid-template-columns: 1fr !important; }
-      /* Buttons full width on mobile */
       .flex.gap-2 > button { flex: 1; }
-      /* Quote preview full screen */
       .fixed.inset-0 > div { border-radius: 0 !important; max-height: 100vh; }
-      /* Table: allow horizontal scroll */
       .overflow-x-auto { -webkit-overflow-scrolling: touch; }
     }
-    /* Hamburger button hidden on desktop */
     #mobileMenuBtn { display: none; }
   </style>
 </head>
@@ -804,47 +889,72 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       };
 
       return (
-        <tr className={`border-b hover:bg-gray-50 ${item.bundleWithPrevious ? 'bg-orange-50' : ''}`}>
-          <td className="py-2 px-2 text-center text-gray-500">
-            {item.bundleWithPrevious ? <span className="text-tc-orange text-xs">↳</span> : index + 1}
-          </td>
-          <td className="py-2 px-2">
-            <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full border rounded px-2 py-1 text-sm mb-1">
-              <option value="">All Sources</option>
-              {sources.filter(s => s.active).map(source => <option key={source._id} value={source._id}>{source.name}</option>)}
-            </select>
-            <select value={item.materialId || ''} onChange={(e) => handleMaterialSelect(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
-              <option value="">Select material...</option>
-              {filteredMaterials.map(mat => <option key={mat._id} value={mat._id}>{mat.materialName} - ${mat.basePrice}/{mat.unit}</option>)}
-              <option value="custom">-- Custom Item --</option>
-            </select>
-          </td>
-          <td className="py-2 px-2">
-            <input type="text" value={item.description} onChange={(e) => onUpdate(index, { ...item, description: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" placeholder="Description" />
-            {canBundle && (
-              <label className={`flex items-center gap-2 mt-1 text-xs cursor-pointer p-1 rounded ${item.bundleWithPrevious ? 'bg-orange-100 border border-orange-300' : ''}`}>
-                <input 
-                  type="checkbox" 
-                  checked={item.bundleWithPrevious || false} 
-                  onChange={(e) => onUpdate(index, { ...item, bundleWithPrevious: e.target.checked })}
-                  className="rounded border-gray-300 text-tc-orange focus:ring-tc-orange"
-                />
-                <span className={item.bundleWithPrevious ? 'text-orange-700 font-semibold' : 'text-gray-600'}>
-                  {item.bundleWithPrevious ? '✓ Will bundle into line above' : 'Bundle into line above (hide on quote)'}
-                </span>
-              </label>
-            )}
-          </td>
-          <td className="py-2 px-2"><input type="number" value={item.quantity || ''} onChange={(e) => { const qty = parseFloat(e.target.value) || 0; onUpdate(index, { ...item, quantity: qty, priceTotal: qty * item.priceEach }); }} className="w-full border rounded px-2 py-1 text-sm text-right min-w-[100px]" /></td>
-          <td className="py-2 px-2">
-            <select value={item.unit} onChange={(e) => onUpdate(index, { ...item, unit: e.target.value })} className="w-full border rounded px-2 py-1 text-sm min-w-[70px]">
-              <option value="Tons">Tons</option><option value="CY">CY</option>
-            </select>
-          </td>
-          <td className="py-2 px-2"><input type="number" value={item.priceEach || ''} onChange={(e) => { const price = parseFloat(e.target.value) || 0; onUpdate(index, { ...item, priceEach: price, priceTotal: item.quantity * price }); }} className="w-full border rounded px-2 py-1 text-sm text-right" step="0.01" /></td>
-          <td className="py-2 px-2 text-right font-medium">{formatCurrency(item.priceTotal || 0)}</td>
-          <td className="py-2 px-2 text-center"><button onClick={() => onRemove(index)} className="text-red-500 hover:text-red-700"><Icons.Trash /></button></td>
-        </tr>
+        <div className={`line-item-card ${item.bundleWithPrevious ? 'bundled' : ''}`}>
+          <div className="line-item-card-header">
+            <div className="flex items-center gap-2">
+              <span className="line-item-num">
+                {item.bundleWithPrevious ? '↳ Bundle' : `Item ${index + 1}`}
+              </span>
+              {item.bundleWithPrevious && <span className="text-xs font-semibold text-orange-600">Bundled with item above (hidden on quote)</span>}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="line-item-total-display">{formatCurrency(item.priceTotal || 0)}</span>
+              <button onClick={() => onRemove(index)} className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50"><Icons.Trash /></button>
+            </div>
+          </div>
+
+          <div className="line-item-grid">
+            {/* Source + Material */}
+            <div>
+              <label className="field-label">Source Location</label>
+              <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="field-input mb-2">
+                <option value="">All Sources</option>
+                {sources.filter(s => s.active).map(source => <option key={source._id} value={source._id}>{source.name}</option>)}
+              </select>
+              <label className="field-label">Material</label>
+              <select value={item.materialId || ''} onChange={(e) => handleMaterialSelect(e.target.value)} className="field-input">
+                <option value="">Select material...</option>
+                {filteredMaterials.map(mat => <option key={mat._id} value={mat._id}>{mat.materialName} — ${mat.basePrice}/{mat.unit}</option>)}
+                <option value="custom">— Custom Item —</option>
+              </select>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="field-label">Description / Line Item Name</label>
+              <input type="text" value={item.description} onChange={(e) => onUpdate(index, { ...item, description: e.target.value })} className="field-input" placeholder="e.g. 1&quot; Clean Limestone" />
+              {canBundle && (
+                <label className={`flex items-center gap-2 mt-3 text-sm cursor-pointer px-3 py-2 rounded-lg border-2 ${item.bundleWithPrevious ? 'bg-orange-50 border-orange-300 text-orange-700 font-bold' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                  <input type="checkbox" checked={item.bundleWithPrevious || false} onChange={(e) => onUpdate(index, { ...item, bundleWithPrevious: e.target.checked })} className="rounded" />
+                  {item.bundleWithPrevious ? '✓ Bundled into line above' : 'Bundle into line above'}
+                </label>
+              )}
+            </div>
+
+            {/* Quantity */}
+            <div>
+              <label className="field-label">Quantity</label>
+              <input type="number" value={item.quantity || ''} onChange={(e) => { const qty = parseFloat(e.target.value) || 0; onUpdate(index, { ...item, quantity: qty, priceTotal: qty * item.priceEach }); }} className="field-input" placeholder="0" />
+            </div>
+
+            {/* Unit */}
+            <div>
+              <label className="field-label">Unit</label>
+              <select value={item.unit} onChange={(e) => onUpdate(index, { ...item, unit: e.target.value })} className="field-input">
+                <option value="Tons">Tons</option>
+                <option value="CY">CY</option>
+                <option value="LS">LS</option>
+                <option value="EA">EA</option>
+              </select>
+            </div>
+
+            {/* Price per unit */}
+            <div>
+              <label className="field-label">Price / Unit ($)</label>
+              <input type="number" value={item.priceEach || ''} onChange={(e) => { const price = parseFloat(e.target.value) || 0; onUpdate(index, { ...item, priceEach: price, priceTotal: item.quantity * price }); }} className="field-input" placeholder="0.00" step="0.01" />
+            </div>
+          </div>
+        </div>
       );
     };
 
@@ -1115,71 +1225,95 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       };
 
       return (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-tc-blue">{quote?._id ? 'Edit' : 'New'} Quote - {formData.quoteNumber}{formData.revisionNumber > 0 && <span className="text-tc-orange ml-2">(R{formData.revisionNumber})</span>}</h2>
+        <div className="max-w-4xl mx-auto">
+          {/* Header bar */}
+          <div className="bg-white rounded-xl shadow-sm px-6 py-4 mb-5 flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-extrabold text-tc-blue">{quote?._id ? 'Edit Quote' : 'New Quote'} <span className="text-tc-orange">#{formData.quoteNumber}</span>{formData.revisionNumber > 0 && <span className="text-tc-orange ml-2 text-sm">(Rev {formData.revisionNumber})</span>}</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Fill in each section below, then Save Draft or Send.</p>
+            </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowPreview(true)} className="flex items-center gap-1 px-3 py-2 border rounded hover:bg-gray-50 text-sm"><Icons.Eye /> Preview</button>
-              <button onClick={onShowCalc} className="flex items-center gap-1 px-3 py-2 bg-gray-100 rounded hover:bg-gray-200 text-sm"><Icons.Calculator /> Calculator</button>
+              <button onClick={() => setShowPreview(true)} className="flex items-center gap-2 px-4 py-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-semibold text-gray-700"><Icons.Eye /> Preview</button>
+              <button onClick={onShowCalc} className="flex items-center gap-2 px-4 py-2 bg-gray-100 border-2 border-gray-200 rounded-lg hover:bg-gray-200 text-sm font-semibold text-gray-700"><Icons.Calculator /> Truck Calc</button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <div><label className="block text-xs font-medium mb-1">Bid Date</label><input type="date" value={formData.bidDate} onChange={(e) => setFormData({ ...formData, bidDate: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-medium mb-1">Expiration</label><input type="date" value={formData.expirationDate} onChange={(e) => setFormData({ ...formData, expirationDate: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-medium mb-1">Delivery</label>
-              <select value={formData.deliveryMethod} onChange={(e) => setFormData({ ...formData, deliveryMethod: e.target.value })} className="w-full border rounded px-3 py-2 text-sm">
-                <option>End Dumps</option><option>Tandem</option><option>Flatbed</option><option>Customer Pickup</option>
-              </select>
-            </div>
-            <div><label className="block text-xs font-medium mb-1">Tax Exempt</label>
-              <select value={formData.taxExemptStatus} onChange={(e) => setFormData({ ...formData, taxExemptStatus: e.target.value })} className="w-full border rounded px-3 py-2 text-sm">
-                <option value="TBD">TBD</option><option value="Yes">Yes</option><option value="No">No</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <CustomerSelect customers={customers} selectedCustomer={selectedCustomer} onSelect={handleCustomerSelect} onAddCustomer={onAddCustomer} />
-            <div><label className="block text-xs font-medium mb-1">Project Name *</label><input type="text" value={formData.projectName} onChange={(e) => setFormData({ ...formData, projectName: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" placeholder="Enter project name" /></div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div><label className="block text-xs font-medium mb-1">Attention</label><input type="text" value={formData.customerSnapshot?.contactName || ''} onChange={(e) => setFormData({ ...formData, customerSnapshot: { ...formData.customerSnapshot, contactName: e.target.value } })} className="w-full border rounded px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-medium mb-1">Project Address</label><input type="text" value={formData.projectAddress} onChange={(e) => setFormData({ ...formData, projectAddress: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" /></div>
-            <div><label className="block text-xs font-medium mb-1">Payment Terms</label>
-              <select value={formData.paymentTerms} onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })} className="w-full border rounded px-3 py-2 text-sm">
-                <option>Net 30</option><option>Net 15</option><option>Net 45</option><option>COD</option><option>Due on Receipt</option>
-              </select>
+          {/* Section 1: Quote Details */}
+          <div className="form-section">
+            <div className="form-section-title">Quote Details</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div><label className="field-label">Bid Date</label><input type="date" value={formData.bidDate} onChange={(e) => setFormData({ ...formData, bidDate: e.target.value })} className="field-input" /></div>
+              <div><label className="field-label">Expiration Date</label><input type="date" value={formData.expirationDate} onChange={(e) => setFormData({ ...formData, expirationDate: e.target.value })} className="field-input" /></div>
+              <div><label className="field-label">Delivery Method</label>
+                <select value={formData.deliveryMethod} onChange={(e) => setFormData({ ...formData, deliveryMethod: e.target.value })} className="field-input">
+                  <option>End Dumps</option><option>Tandem</option><option>Flatbed</option><option>Customer Pickup</option>
+                </select>
+              </div>
+              <div><label className="field-label">Tax Exempt</label>
+                <select value={formData.taxExemptStatus} onChange={(e) => setFormData({ ...formData, taxExemptStatus: e.target.value })} className="field-input">
+                  <option value="TBD">TBD</option><option value="Yes">Yes</option><option value="No">No</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="mb-4">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-semibold text-tc-blue">Line Items</h3>
-              <button onClick={addLineItem} className="flex items-center gap-1 text-tc-orange hover:text-orange-600 text-sm"><Icons.Plus /> Add Item</button>
+          {/* Section 2: Customer & Project */}
+          <div className="form-section">
+            <div className="form-section-title">Customer &amp; Project</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <CustomerSelect customers={customers} selectedCustomer={selectedCustomer} onSelect={handleCustomerSelect} onAddCustomer={onAddCustomer} />
+              <div><label className="field-label">Project Name *</label><input type="text" value={formData.projectName} onChange={(e) => setFormData({ ...formData, projectName: e.target.value })} className="field-input" placeholder="Enter project name" /></div>
             </div>
-            <div className="overflow-x-auto border rounded-lg">
-              <table className="w-full text-sm">
-                <thead className="bg-tc-blue text-white">
-                  <tr><th className="py-2 px-2 w-10">#</th><th className="py-2 px-2 text-left w-44">Source/Material</th><th className="py-2 px-2 text-left">Description</th><th className="py-2 px-2 w-28">Qty</th><th className="py-2 px-2 w-20">Unit</th><th className="py-2 px-2 w-24">$/Unit</th><th className="py-2 px-2 w-28">Total</th><th className="py-2 px-2 w-10"></th></tr>
-                </thead>
-                <tbody>
-                  {formData.lineItems.map((item, idx) => <LineItemRow key={idx} item={item} index={idx} materials={materials} sources={sources} onUpdate={updateLineItem} onRemove={removeLineItem} canBundle={idx > 0} />)}
-                  {formData.lineItems.length === 0 && <tr><td colSpan="8" className="py-6 text-center text-gray-400">No items. Click "Add Item" to begin.</td></tr>}
-                </tbody>
-                <tfoot className="bg-gray-100 font-semibold"><tr><td colSpan="6" className="py-2 px-2 text-right">Subtotal:</td><td className="py-2 px-2 text-right text-lg text-tc-blue">{formatCurrency(subtotal)}</td><td></td></tr></tfoot>
-              </table>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div><label className="field-label">Attention</label><input type="text" value={formData.customerSnapshot?.contactName || ''} onChange={(e) => setFormData({ ...formData, customerSnapshot: { ...formData.customerSnapshot, contactName: e.target.value } })} className="field-input" placeholder="Contact name" /></div>
+              <div><label className="field-label">Project Address</label><input type="text" value={formData.projectAddress} onChange={(e) => setFormData({ ...formData, projectAddress: e.target.value })} className="field-input" placeholder="Job site address" /></div>
+              <div><label className="field-label">Payment Terms</label>
+                <select value={formData.paymentTerms} onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })} className="field-input">
+                  <option>Net 30</option><option>Net 15</option><option>Net 45</option><option>COD</option><option>Due on Receipt</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="mb-4"><label className="block text-xs font-medium mb-1">Scope of Work</label><textarea value={formData.scopeOfWork} onChange={(e) => setFormData({ ...formData, scopeOfWork: e.target.value })} className="w-full border rounded px-3 py-2 text-sm h-20" placeholder="Enter scope details..." /></div>
+          {/* Section 3: Line Items */}
+          <div className="form-section">
+            <div className="flex justify-between items-center mb-4" style={{borderBottom:'2px solid #e2e8f0', paddingBottom:'10px'}}>
+              <span className="form-section-title" style={{margin:0, border:0, padding:0}}>Line Items</span>
+              <button onClick={addLineItem} className="flex items-center gap-2 px-4 py-2 bg-tc-orange text-white rounded-lg font-semibold text-sm hover:bg-orange-600"><Icons.Plus /> Add Material</button>
+            </div>
 
-          <div className="flex justify-between pt-4 border-t">
-            <button onClick={onCancel} className="px-4 py-2 border rounded hover:bg-gray-50 text-sm">Cancel</button>
-            <div className="flex gap-2">
-              <button onClick={() => handleSave(false)} className="flex items-center gap-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"><Icons.Save /> Save Draft</button>
-              <button onClick={() => handleSave(true)} className="flex items-center gap-1 px-4 py-2 bg-tc-orange text-white rounded hover:bg-orange-600 text-sm"><Icons.Send /> Save & Send</button>
+            {formData.lineItems.length === 0 && (
+              <div className="text-center py-10 text-gray-400">
+                <div className="text-4xl mb-3">📦</div>
+                <p className="font-semibold text-gray-500">No materials added yet</p>
+                <p className="text-sm mt-1">Click "Add Material" to start building your quote.</p>
+              </div>
+            )}
+
+            {formData.lineItems.map((item, idx) => <LineItemRow key={idx} item={item} index={idx} materials={materials} sources={sources} onUpdate={updateLineItem} onRemove={removeLineItem} canBundle={idx > 0} />)}
+
+            {formData.lineItems.length > 0 && (
+              <div className="flex justify-end mt-4 pt-4 border-t-2 border-gray-200">
+                <div className="text-right">
+                  <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Quote Subtotal</span>
+                  <div className="text-3xl font-extrabold text-tc-blue mt-1">{formatCurrency(subtotal)}</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 4: Scope of Work */}
+          <div className="form-section">
+            <div className="form-section-title">Scope of Work</div>
+            <textarea value={formData.scopeOfWork} onChange={(e) => setFormData({ ...formData, scopeOfWork: e.target.value })} className="field-input" style={{height:'96px', resize:'vertical'}} placeholder="Describe the scope, special conditions, or notes for this quote..." />
+          </div>
+
+          {/* Action buttons */}
+          <div className="bg-white rounded-xl shadow-sm px-6 py-4 flex justify-between items-center">
+            <button onClick={onCancel} className="px-5 py-2.5 border-2 border-gray-300 rounded-lg font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
+            <div className="flex gap-3">
+              <button onClick={() => handleSave(false)} className="flex items-center gap-2 px-5 py-2.5 bg-gray-700 text-white rounded-lg font-semibold hover:bg-gray-800"><Icons.Save /> Save Draft</button>
+              <button onClick={() => handleSave(true)} className="flex items-center gap-2 px-6 py-2.5 bg-tc-orange text-white rounded-lg font-bold hover:bg-orange-600"><Icons.Send /> Save &amp; Send</button>
             </div>
           </div>
 
@@ -1375,19 +1509,25 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
       if (!user) {
         return (
-          <div className="min-h-screen bg-gradient-to-br from-tc-blue to-blue-800 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8">
-              <div className="text-center mb-6">
-                <img src="/apple-touch-icon.png" alt="T&C Ez Quote" className="w-20 h-20 rounded-xl mx-auto mb-3 shadow-lg" />
-                <h1 className="text-2xl font-bold">T&C Ez Quote</h1>
-                <p className="text-gray-500 text-sm">T&C Materials, LLC</p>
+          <div className="min-h-screen bg-gradient-to-br from-tc-blue to-blue-900 flex items-center justify-center p-6">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-10">
+              <div className="text-center mb-8">
+                <img src="/apple-touch-icon.png" alt="T&C Ez Quote" className="w-28 h-28 rounded-2xl mx-auto mb-5 shadow-xl" />
+                <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">T&C Ez Quote</h1>
+                <p className="text-gray-500 text-base mt-2 font-medium">T&C Materials, LLC — Quote Management</p>
               </div>
-              <form onSubmit={handleLogin} className="space-y-4">
-                <input type="text" value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} placeholder="Username" className="w-full border rounded-lg px-4 py-3" />
-                <input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} placeholder="Password" className="w-full border rounded-lg px-4 py-3" />
-                <button type="submit" className="w-full bg-tc-orange text-white py-3 rounded-lg font-medium hover:bg-orange-600">Sign In</button>
+              <form onSubmit={handleLogin} className="space-y-5">
+                <div>
+                  <label className="field-label">Username</label>
+                  <input type="text" value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} placeholder="e.g. alex.saplala" className="field-input" autoComplete="username" autoCapitalize="none" />
+                </div>
+                <div>
+                  <label className="field-label">Password</label>
+                  <input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} placeholder="Enter your password" className="field-input" autoComplete="current-password" />
+                </div>
+                <button type="submit" className="w-full bg-tc-orange text-white py-4 rounded-xl font-bold text-lg hover:bg-orange-600 transition-colors mt-2" style={{minHeight:'56px'}}>Sign In</button>
               </form>
-              <p className="mt-4 text-center text-xs text-gray-500">Users: alex.saplala, corey.pelletier</p>
+              <p className="mt-6 text-center text-sm text-gray-400">alex.saplala &nbsp;·&nbsp; corey.pelletier</p>
             </div>
           </div>
         );
