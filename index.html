@@ -39,8 +39,21 @@
     /* Mobile touch improvements */
     button, select, input { min-height: 44px; }
     @media (max-width: 768px) {
-      .sidebar-collapsed { width: 0 !important; padding: 0 !important; overflow: hidden; }
+      /* Sidebar: hidden by default on mobile */
+      aside.mobile-hidden { width: 0 !important; padding: 0 !important; overflow: hidden !important; min-width: 0 !important; }
+      /* Hamburger: fixed top-left so it's always visible */
+      #mobileMenuBtn { display: flex !important; }
+      /* Grid layouts collapse to single column */
+      .grid-cols-2, .grid-cols-4, .md\:grid-cols-4, .md\:grid-cols-2, .md\:grid-cols-3 { grid-template-columns: 1fr !important; }
+      /* Buttons full width on mobile */
+      .flex.gap-2 > button { flex: 1; }
+      /* Quote preview full screen */
+      .fixed.inset-0 > div { border-radius: 0 !important; max-height: 100vh; }
+      /* Table: allow horizontal scroll */
+      .overflow-x-auto { -webkit-overflow-scrolling: touch; }
     }
+    /* Hamburger button hidden on desktop */
+    #mobileMenuBtn { display: none; }
   </style>
 </head>
 <body class="bg-gray-100">
@@ -1309,7 +1322,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const [editQuote, setEditQuote] = useState(null);
       const [showCalc, setShowCalc] = useState(false);
       const [calcRate, setCalcRate] = useState(null);
-      const [sidebar, setSidebar] = useState(true);
+      const [sidebar, setSidebar] = useState(window.innerWidth > 768);
       const [login, setLogin] = useState({ username: '', password: '' });
 
       useEffect(() => { saveToStorage(data); }, [data]);
@@ -1323,11 +1336,36 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const updateMaterial = (m) => setData({ ...data, materials: data.materials.map(x => x._id === m._id ? m : x) });
       const addMaterial = (m) => setData({ ...data, materials: [...data.materials, m] });
 
-      const saveQuote = (q, send) => {
-        if (editQuote?._id) {
-          setData({ ...data, quotes: data.quotes.map(x => x._id === editQuote._id ? { ...x, ...q, updatedAt: new Date().toISOString() } : x) });
+      const saveQuote = async (q, send) => {
+        const isNew = !editQuote?._id;
+        let finalQuote = { ...q };
+        if (isNew) {
+          try {
+            const response = await fetch('https://texasgotrocks.com/.netlify/functions/tcq-log-quote', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                salesRepSnapshot: q.salesRepSnapshot,
+                customerSnapshot: q.customerSnapshot,
+                projectName: q.projectName,
+                lineItems: q.lineItems,
+                deliveryMethod: q.deliveryMethod,
+                paymentTerms: q.paymentTerms,
+                quoteData: q
+              })
+            });
+            const res = await response.json();
+            if (res && res.quoteNumber) {
+              finalQuote = { ...finalQuote, quoteNumber: res.quoteNumber };
+            }
+          } catch (e) {
+            console.error('Failed to log quote to server:', e);
+          }
+        }
+        if (isNew) {
+          setData({ ...data, quotes: [{ ...finalQuote, _id: Date.now().toString(), createdAt: new Date().toISOString() }, ...data.quotes] });
         } else {
-          setData({ ...data, quotes: [{ ...q, _id: Date.now().toString(), createdAt: new Date().toISOString() }, ...data.quotes] });
+          setData({ ...data, quotes: data.quotes.map(x => x._id === editQuote._id ? { ...x, ...finalQuote, updatedAt: new Date().toISOString() } : x) });
         }
         setShowForm(false); setEditQuote(null); setCalcRate(null);
         if (send) alert('Quote saved! Email integration requires Brevo setup.');
@@ -1357,7 +1395,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
       return (
         <div className="min-h-screen bg-gray-100 flex">
-          <aside className={`${sidebar ? 'w-56' : 'w-14'} bg-tc-blue text-white transition-all flex flex-col`}>
+          <aside className={`${sidebar ? 'w-56' : 'w-14 mobile-hidden'} bg-tc-blue text-white transition-all flex flex-col`}>
             <div className="p-3 border-b border-blue-800 flex items-center gap-2">
               <div className="w-8 h-8 bg-tc-orange rounded flex items-center justify-center flex-shrink-0"><Icons.Building /></div>
               {sidebar && <div><h1 className="font-bold text-sm">T&C Ez Quote</h1></div>}
