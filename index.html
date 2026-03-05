@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="T&C Ez Quote">
+  <meta name="theme-color" content="#1e3a5f">
+  <meta name="description" content="T&C Materials Quote System - Create and manage quotes for bulk materials and trucking">
+  
+  <title>T&C Ez Quote - T&C Materials, LLC</title>
+  
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'tc-blue': '#1e3a5f',
+            'tc-orange': '#f97316'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+    @media print { .no-print { display: none !important; } }
+    .quote-preview { font-family: 'Times New Roman', serif; }
+    /* Mobile touch improvements */
+    button, select, input { min-height: 44px; }
+    @media (max-width: 768px) {
+      .sidebar-collapsed { width: 0 !important; padding: 0 !important; overflow: hidden; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div id="root"></div>
+  
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // ============================================
+    // CONFIGURATION & API
+    // ============================================
+    const API_BASE = '/.netlify/functions';
+    const USE_API = true; // Set to false for localStorage-only mode (demo)
+    const STORAGE_KEY = 'tc_ez_quote_data_v3';
+
+    // API Helper
+    const api = {
+      async get(endpoint) {
+        if (!USE_API) return null;
+        try {
+          const res = await fetch(`${API_BASE}/${endpoint}`);
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.error(`GET ${endpoint} failed:`, e);
+          return null;
+        }
+      },
+      async post(endpoint, data) {
+        if (!USE_API) return null;
+        try {
+          const res = await fetch(`${API_BASE}/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.error(`POST ${endpoint} failed:`, e);
+          return null;
+        }
+      },
+      async put(endpoint, data) {
+        if (!USE_API) return null;
+        try {
+          const res = await fetch(`${API_BASE}/${endpoint}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.error(`PUT ${endpoint} failed:`, e);
+          return null;
+        }
+      },
+      async delete(endpoint) {
+        if (!USE_API) return null;
+        try {
+          const res = await fetch(`${API_BASE}/${endpoint}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.error(`DELETE ${endpoint} failed:`, e);
+          return null;
+        }
+      }
+    };
+
+    // Local Storage (fallback/cache)
+    const loadFromStorage = () => {
+      try {
+        const data = localStorage.getItem(STORAGE_KEY);
+        return data ? JSON.parse(data) : null;
+      } catch { return null; }
+    };
+
+    const saveToStorage = (data) => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) { console.error('Failed to save:', e); }
+    };
+
+    // ============================================
+    // CONTRACT LANGUAGE
+    // ============================================
+    const TERMS_CONDITIONS = `T&C will honor pricing for the duration of the project or until the expiration date on quote. T&C shall have no obligation to ship or deliver except upon its determination prior to each shipment or delivery that Customer is worthy of the credit to be extended and is not in default upon any obligation to T&C. Upon default, Customer agrees to pay all of T&C Materials, LLC collection expenses, including attorneys' fees. A charge of 1.5% per month, (18% annum), will accrue on a daily basis from the date of invoice and until the date the balance is paid in full. T&C can make no guarantee as to material availability, but will make every reasonable effort to supply the material. T&C shall have no liability for delay or failure to make shipments, or delivery, as a result of strikes, labor problems, severe weather conditions, casualty, mechanical breakdowns or other conditions beyond T&C's control. In no event shall T&C be liable for any incidental or consequential damages. T&C has the right to change pricing and or quantities upon 30 days' notice to Customer. T&C shall in no event be responsible for any incidental or consequential damage caused by non-compliance of the material with specifications, or for any defects in the material sold hereunder. All disputes will be governed by Texas law.
+
+Terms are Net 30, unless other arrangements are made and agreed upon in writing. (subject to credit approval) Please note terms and conditions apply.`;
+
+    const TAX_DISCLAIMER = `Prices quoted above do not include any state or local sales and use tax, if any applies for this project. If the project is tax exempt, a TE certificate must be sent to marisa@tcmaterialsllc.com prior to the first delivery or pick-up.`;
+
+    // ============================================
+    // UTILITIES
+    // ============================================
+    const formatCurrency = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount || 0);
+    const formatDate = (dateStr) => dateStr ? new Date(dateStr).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '';
+    const generateQuoteNumber = () => {
+      const now = new Date();
+      return `TCQ${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getFullYear()).slice(-2)}`;
+    };
+
+    // ============================================
+    // INITIAL DATA
+    // ============================================
+    const getInitialData = () => {
+      const stored = loadFromStorage();
+      if (stored) return stored;
+      
+      return {
+        users: [
+          { _id: '1', username: 'alex.saplala', name: 'Alex Saplala', role: 'admin', phone: '936-279-2959', email: 'alex.saplala@tcmaterialsllc.com' },
+          { _id: '2', username: 'corey.pelletier', name: 'Corey L. Pelletier', role: 'sales_rep', phone: '936-363-5803', email: 'corey@tcmaterialsllc.com' }
+        ],
+        customers: [
+          { _id: '1', companyName: 'Northwest Site Construction', shortName: 'NSC', address: '123 Industrial Blvd, Conroe, TX 77301', contacts: [{ name: 'Dena White', email: 'denaw@nwscon.com', phone: '636-465-4861', isPrimary: true }], paymentTerms: 'Net 30', taxExempt: null },
+          { _id: '2', companyName: "Landry's Landscape", shortName: 'LL', address: '456 Garden Way, The Woodlands, TX 77380', contacts: [{ name: 'Megan Groome', email: 'mgroome@landrylandscape.com', phone: '225-752-9177', isPrimary: true }], paymentTerms: 'Net 30', taxExempt: null }
+        ],
+        sourceLocations: [
+          { _id: '1', name: 'Willis Quarry', type: 'Quarry', address: '1234 Quarry Rd, Willis, TX 77378', city: 'Willis', active: true },
+          { _id: '2', name: 'Conroe Sand & Gravel', type: 'Sand & Gravel Pit', address: '5678 Pit Lane, Conroe, TX 77301', city: 'Conroe', active: true },
+          { _id: '3', name: 'Montgomery Aggregate', type: 'Quarry', address: '910 Stone Dr, Montgomery, TX 77356', city: 'Montgomery', active: true }
+        ],
+        materials: [
+          { _id: '1', sourceLocationId: '1', materialName: '1" Clean Limestone', materialType: 'aggregate', unit: 'Tons', basePrice: 55.00, active: true },
+          { _id: '2', sourceLocationId: '1', materialName: '3/8 Clean Limestone', materialType: 'aggregate', unit: 'Tons', basePrice: 54.00, active: true },
+          { _id: '3', sourceLocationId: '1', materialName: 'GAB / Road Base', materialType: 'base', unit: 'Tons', basePrice: 45.00, active: true },
+          { _id: '4', sourceLocationId: '1', materialName: 'Flex Base', materialType: 'base', unit: 'Tons', basePrice: 48.00, active: true },
+          { _id: '5', sourceLocationId: '2', materialName: 'Decomposed Granite', materialType: 'aggregate', unit: 'CY', basePrice: 99.50, active: true },
+          { _id: '6', sourceLocationId: '2', materialName: 'Planting Topsoil', materialType: 'soil', unit: 'CY', basePrice: 44.25, active: true },
+          { _id: '7', sourceLocationId: '1', materialName: '5/7 Stone', materialType: 'aggregate', unit: 'Tons', basePrice: 52.00, active: true },
+          { _id: '8', sourceLocationId: '1', materialName: '6/7 Stone', materialType: 'aggregate', unit: 'Tons', basePrice: 50.00, active: true },
+          { _id: '9', sourceLocationId: '3', materialName: 'Haul Off - Topsoil', materialType: 'haul_off', unit: 'CY', basePrice: 8.00, active: true },
+          { _id: '10', sourceLocationId: '3', materialName: 'Haul Off - Suitable Fill', materialType: 'haul_off', unit: 'CY', basePrice: 8.00, active: true },
+          { _id: '11', sourceLocationId: '2', materialName: 'Crushed Concrete', materialType: 'aggregate', unit: 'Tons', basePrice: 35.00, active: true },
+          { _id: '12', sourceLocationId: '2', materialName: 'Mason Sand', materialType: 'sand', unit: 'Tons', basePrice: 42.00, active: true }
+        ],
+        quotes: []
+      };
+    };
+
+    // ============================================
+    // ICONS
+    // ============================================
+    const Icons = {
+      Building: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>,
+      FileText: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+      Users: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
+      Package: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>,
+      MapPin: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
+      LogOut: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>,
+      Plus: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>,
+      Search: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+      Edit: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
+      Eye: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>,
+      Send: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>,
+      Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>,
+      X: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>,
+      Check: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
+      ChevronDown: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>,
+      Menu: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>,
+      Calculator: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>,
+      Copy: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>,
+      Printer: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>,
+      Truck: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg>,
+      Save: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+    };
+
+    // ============================================
+    // TRUCK RATE CALCULATOR
+    // ============================================
+    const TruckRateCalculator = ({ isOpen, onClose, onApply }) => {
+      const [hourlyRate, setHourlyRate] = useState('125');
+      const [tolls, setTolls] = useState('0');
+      const [travelTime, setTravelTime] = useState('30');
+      const [loadingTime, setLoadingTime] = useState('5');
+      const [unloadingTime, setUnloadingTime] = useState('5');
+      const [truckCapacityTons, setTruckCapacityTons] = useState('21');
+      const [materialDensity, setMaterialDensity] = useState('1.4');
+      const [roundTrips, setRoundTrips] = useState('3');
+      const [description, setDescription] = useState('Trucking / Hauling');
+      const [outputUnit, setOutputUnit] = useState('Tons');
+
+      // Truck type presets - TONS only (legal weight limits)
+      const truckPresets = [
+        { name: 'End Dump (Truck & Trailer)', tons: '21' },
+        { name: 'Tandem', tons: '15' },
+        { name: 'Super Dump', tons: '26' },
+        { name: 'Belly Dump', tons: '24' },
+      ];
+
+      // Material density presets (tons per CY)
+      const materialPresets = [
+        { name: 'Gravel/Limestone', density: '1.4' },
+        { name: 'Road Base', density: '1.5' },
+        { name: 'Sand', density: '1.35' },
+        { name: 'Crushed Concrete', density: '1.3' },
+        { name: 'Topsoil', density: '1.1' },
+        { name: 'Clay/Fill Dirt', density: '1.25' },
+      ];
+
+      const calculate = () => {
+        const rate = parseFloat(hourlyRate) || 0;
+        const tollCost = parseFloat(tolls) || 0;
+        const travel = parseFloat(travelTime) || 0;
+        const loading = parseFloat(loadingTime) || 0;
+        const unloading = parseFloat(unloadingTime) || 0;
+        const capacityTons = parseFloat(truckCapacityTons) || 21;
+        const density = parseFloat(materialDensity) || 1.4;
+        const trips = parseFloat(roundTrips) || 1;
+        
+        // Calculate CY capacity from tons and material density
+        const capacityCY = capacityTons / density;
+        
+        // Time calculations
+        const timePerTrip = (travel * 2) + loading + unloading;
+        const hoursPerTrip = timePerTrip / 60;
+        
+        // Cost per trip
+        const costPerTrip = (rate * hoursPerTrip) + tollCost;
+        
+        // Cost per unit
+        const costPerTon = costPerTrip / capacityTons;
+        const costPerCY = costPerTrip / capacityCY;
+        
+        // Daily revenue
+        const dailyRevenue = costPerTrip * trips;
+        
+        return { 
+          timePerTrip: timePerTrip.toFixed(0), 
+          hoursPerTrip: hoursPerTrip.toFixed(2),
+          costPerTrip: costPerTrip.toFixed(2),
+          capacityCY: capacityCY.toFixed(1),
+          costPerCY: costPerCY.toFixed(2), 
+          costPerTon: costPerTon.toFixed(2),
+          dailyRevenue: dailyRevenue.toFixed(2)
+        };
+      };
+
+      const results = calculate();
+      if (!isOpen) return null;
+
+      const selectedCost = outputUnit === 'CY' ? results.costPerCY : results.costPerTon;
+
+      const handleApply = () => {
+        onApply({ 
+          costPerUnit: parseFloat(selectedCost), 
+          unit: outputUnit,
+          description: description || `Trucking - ${travelTime} min each way`,
+          timestamp: Date.now()
+        }); 
+        onClose();
+      };
+
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+            <div className="bg-tc-blue text-white p-4 flex justify-between items-center">
+              <h3 className="font-bold flex items-center gap-2"><Icons.Truck /> Truck Rate Calculator</h3>
+              <button onClick={onClose} className="hover:text-gray-300"><Icons.X /></button>
+            </div>
+            <div className="p-4 space-y-3 max-h-[65vh] overflow-y-auto">
+              
+              {/* Truck Type Presets */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-2">Truck Type (Legal Weight Limit)</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {truckPresets.map(preset => (
+                    <button key={preset.name} onClick={() => setTruckCapacityTons(preset.tons)} className={`p-2 text-xs border rounded text-left hover:bg-orange-50 ${truckCapacityTons === preset.tons ? 'border-tc-orange bg-orange-50' : 'border-gray-300'}`}>
+                      <div className="font-semibold">{preset.name}</div>
+                      <div className="text-gray-500">{preset.tons} tons</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Truck Capacity (Tons)</label>
+                <input type="number" value={truckCapacityTons} onChange={(e) => setTruckCapacityTons(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" />
+              </div>
+
+              {/* Material Density */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Material Type</label>
+                <select value={materialDensity} onChange={(e) => setMaterialDensity(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900">
+                  {materialPresets.map(m => <option key={m.name} value={m.density}>{m.name} ({m.density} tons/CY)</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">= {results.capacityCY} CY per load at {truckCapacityTons} tons</p>
+              </div>
+
+              <div className="border-t pt-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><label className="block text-xs font-semibold text-gray-700 mb-1">Hourly Rate ($)</label><input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+                  <div><label className="block text-xs font-semibold text-gray-700 mb-1">Tolls Round Trip ($)</label><input type="number" value={tolls} onChange={(e) => setTolls(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+                </div>
+              </div>
+              
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1">Travel Time One Way (min)</label><input type="number" value={travelTime} onChange={(e) => setTravelTime(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1">Loading (min)</label><input type="number" value={loadingTime} onChange={(e) => setLoadingTime(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+                <div><label className="block text-xs font-semibold text-gray-700 mb-1">Unloading (min)</label><input type="number" value={unloadingTime} onChange={(e) => setUnloadingTime(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+              </div>
+
+              <div><label className="block text-xs font-semibold text-gray-700 mb-1">Round Trips/Day</label><input type="number" value={roundTrips} onChange={(e) => setRoundTrips(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+              
+              {/* Results - Show BOTH rates */}
+              <div className="bg-gray-100 rounded-lg p-3 space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className={`p-3 rounded-lg cursor-pointer border-2 ${outputUnit === 'Tons' ? 'bg-tc-blue text-white border-tc-blue' : 'bg-white border-gray-300'}`} onClick={() => setOutputUnit('Tons')}>
+                    <p className="text-xs opacity-75">Cost per Ton</p>
+                    <p className="text-xl font-bold">${results.costPerTon}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg cursor-pointer border-2 ${outputUnit === 'CY' ? 'bg-tc-blue text-white border-tc-blue' : 'bg-white border-gray-300'}`} onClick={() => setOutputUnit('CY')}>
+                    <p className="text-xs opacity-75">Cost per CY</p>
+                    <p className="text-xl font-bold">${results.costPerCY}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-600 text-center">Click to select rate → will auto-bundle with line above</p>
+                <div className="text-xs text-gray-600 text-center border-t pt-2">
+                  ${results.costPerTrip}/trip | {results.hoursPerTrip} hrs/trip | ${results.dailyRevenue}/day
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Line Item Description</label>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" placeholder="Trucking / Hauling" />
+              </div>
+            </div>
+            <div className="p-4 border-t flex gap-3">
+              <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50">Close</button>
+              <button onClick={handleApply} className="flex-1 px-4 py-2.5 bg-tc-orange text-white rounded-lg font-medium hover:bg-orange-600">Add ${selectedCost}/{outputUnit}</button>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================
+    // CUSTOMER SELECT WITH FULL FIELDS
+    // ============================================
+    const CustomerSelect = ({ customers, selectedCustomer, onSelect, onAddCustomer }) => {
+      const [search, setSearch] = useState('');
+      const [isOpen, setIsOpen] = useState(false);
+      const [showNewForm, setShowNewForm] = useState(false);
+      const [newCustomer, setNewCustomer] = useState({ 
+        companyName: '', shortName: '', address: '', 
+        contactName: '', contactEmail: '', contactPhone: '' 
+      });
+
+      const filteredCustomers = customers.filter(c => 
+        c.companyName.toLowerCase().includes(search.toLowerCase()) || 
+        c.shortName.toLowerCase().includes(search.toLowerCase())
+      );
+
+      const handleAddNew = () => {
+        if (!newCustomer.companyName) { alert('Company name is required'); return; }
+        const customer = {
+          _id: Date.now().toString(),
+          companyName: newCustomer.companyName,
+          shortName: newCustomer.shortName || newCustomer.companyName.substring(0, 3).toUpperCase(),
+          address: newCustomer.address,
+          contacts: [{ 
+            name: newCustomer.contactName, 
+            email: newCustomer.contactEmail, 
+            phone: newCustomer.contactPhone, 
+            isPrimary: true 
+          }],
+          paymentTerms: 'Net 30',
+          taxExempt: null
+        };
+        onAddCustomer(customer);
+        onSelect(customer);
+        setShowNewForm(false);
+        setIsOpen(false);
+        setNewCustomer({ companyName: '', shortName: '', address: '', contactName: '', contactEmail: '', contactPhone: '' });
+      };
+
+      return (
+        <div className="relative">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
+          <div onClick={() => setIsOpen(!isOpen)} className="border rounded-lg px-3 py-2 cursor-pointer flex justify-between items-center hover:border-tc-orange bg-white">
+            <span className={selectedCustomer ? 'text-gray-900' : 'text-gray-500'}>
+              {selectedCustomer ? `${selectedCustomer.shortName} - ${selectedCustomer.companyName}` : 'Select or add customer...'}
+            </span>
+            <Icons.ChevronDown />
+          </div>
+          
+          {isOpen && (
+            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}>
+              <div className="absolute bg-white border rounded-lg shadow-2xl overflow-hidden" style={{ top: 'auto', left: '50%', transform: 'translateX(-50%)', width: '90%', maxWidth: '500px', maxHeight: '80vh', marginTop: '10vh' }} onClick={(e) => e.stopPropagation()}>
+                <div className="p-3 border-b bg-tc-blue text-white">
+                  <h4 className="font-medium">Select Customer</h4>
+                </div>
+                <div className="p-3 border-b bg-gray-50">
+                  <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search customers..." className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-500" autoFocus />
+                </div>
+                
+                <div className="max-h-48 overflow-y-auto">
+                  {filteredCustomers.map(customer => (
+                    <div key={customer._id} onClick={() => { onSelect(customer); setIsOpen(false); setSearch(''); }} className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b">
+                      <div className="font-semibold text-gray-900">{customer.shortName} - {customer.companyName}</div>
+                      <div className="text-sm text-gray-600">{customer.contacts[0]?.name} | {customer.contacts[0]?.phone} | {customer.contacts[0]?.email}</div>
+                    </div>
+                  ))}
+                  
+                  <div onClick={() => setShowNewForm(true)} className="px-4 py-3 hover:bg-green-50 cursor-pointer flex items-center gap-2 text-green-700 font-semibold bg-green-50 border-b">
+                    <Icons.Plus /> Add New Customer
+                  </div>
+                </div>
+
+                {/* New Customer Form with ALL fields */}
+                {showNewForm && (
+                  <div className="p-4 border-t bg-white max-h-64 overflow-y-auto">
+                    <h4 className="font-semibold mb-3 text-tc-blue text-lg">Add New Customer</h4>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Company Name *</label>
+                          <input type="text" value={newCustomer.companyName} onChange={(e) => setNewCustomer({ ...newCustomer, companyName: e.target.value })} placeholder="ABC Paving Inc." className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Short Name</label>
+                          <input type="text" value={newCustomer.shortName} onChange={(e) => setNewCustomer({ ...newCustomer, shortName: e.target.value.toUpperCase() })} placeholder="ABC" className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400" maxLength="10" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">Company Address</label>
+                        <input type="text" value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} placeholder="123 Main St., Conroe, TX 77301" className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400" />
+                      </div>
+                      <div className="border-t pt-3 mt-3">
+                        <p className="text-sm font-semibold text-gray-700 mb-2">Primary Contact</p>
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1">Contact Name</label>
+                            <input type="text" value={newCustomer.contactName} onChange={(e) => setNewCustomer({ ...newCustomer, contactName: e.target.value })} placeholder="John Smith" className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1">Phone</label>
+                              <input type="tel" value={newCustomer.contactPhone} onChange={(e) => setNewCustomer({ ...newCustomer, contactPhone: e.target.value })} placeholder="936-555-1234" className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 mb-1">Email</label>
+                              <input type="email" value={newCustomer.contactEmail} onChange={(e) => setNewCustomer({ ...newCustomer, contactEmail: e.target.value })} placeholder="john@company.com" className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 placeholder-gray-400" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex gap-3 pt-3">
+                        <button onClick={() => setShowNewForm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                        <button onClick={handleAddNew} className="flex-1 px-4 py-2 bg-tc-orange text-white rounded text-sm font-medium hover:bg-orange-600">Save Customer</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="p-3 border-t bg-gray-100">
+                  <button onClick={() => setIsOpen(false)} className="w-full px-4 py-2 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-white">Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // ============================================
+    // SOURCE LOCATIONS MANAGER
+    // ============================================
+    const SourceLocationsManager = ({ sources, onUpdate, onAdd }) => {
+      const [editingId, setEditingId] = useState(null);
+      const [editForm, setEditForm] = useState({});
+      const [showAddForm, setShowAddForm] = useState(false);
+      const [newSource, setNewSource] = useState({ name: '', type: 'Quarry', address: '', city: '' });
+
+      const startEdit = (source) => {
+        setEditingId(source._id);
+        setEditForm({ ...source });
+      };
+
+      const saveEdit = () => {
+        onUpdate(editForm);
+        setEditingId(null);
+      };
+
+      const handleAddSource = () => {
+        if (!newSource.name) { alert('Source name is required'); return; }
+        onAdd({
+          _id: Date.now().toString(),
+          ...newSource,
+          active: true
+        });
+        setNewSource({ name: '', type: 'Quarry', address: '', city: '' });
+        setShowAddForm(false);
+      };
+
+      return (
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="p-4 border-b flex justify-between items-center">
+            <h3 className="font-semibold text-tc-blue flex items-center gap-2"><Icons.MapPin /> Source Locations ({sources.length})</h3>
+            <button onClick={() => setShowAddForm(true)} className="flex items-center gap-1 px-3 py-1.5 bg-tc-orange text-white rounded text-sm hover:bg-orange-600">
+              <Icons.Plus /> Add Source
+            </button>
+          </div>
+
+          {showAddForm && (
+            <div className="p-4 bg-green-50 border-b">
+              <h4 className="font-medium mb-3">Add New Source Location</h4>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <input type="text" value={newSource.name} onChange={(e) => setNewSource({ ...newSource, name: e.target.value })} placeholder="Source Name *" className="border rounded px-3 py-2 text-sm" />
+                <select value={newSource.type} onChange={(e) => setNewSource({ ...newSource, type: e.target.value })} className="border rounded px-3 py-2 text-sm">
+                  <option value="Quarry">Quarry</option>
+                  <option value="Sand & Gravel Pit">Sand & Gravel Pit</option>
+                  <option value="Recycling Facility">Recycling Facility</option>
+                  <option value="Dump Site">Dump Site</option>
+                </select>
+                <input type="text" value={newSource.address} onChange={(e) => setNewSource({ ...newSource, address: e.target.value })} placeholder="Address" className="border rounded px-3 py-2 text-sm" />
+                <input type="text" value={newSource.city} onChange={(e) => setNewSource({ ...newSource, city: e.target.value })} placeholder="City" className="border rounded px-3 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => setShowAddForm(false)} className="px-4 py-1.5 border rounded text-sm hover:bg-white">Cancel</button>
+                <button onClick={handleAddSource} className="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700">Save Source</button>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-tc-blue text-white">
+                <tr>
+                  <th className="py-2 px-4 text-left">Name</th>
+                  <th className="py-2 px-4 text-left">Type</th>
+                  <th className="py-2 px-4 text-left">Address</th>
+                  <th className="py-2 px-4 text-left">City</th>
+                  <th className="py-2 px-4 text-center w-24">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sources.map(source => (
+                  <tr key={source._id} className="border-b hover:bg-gray-50">
+                    {editingId === source._id ? (
+                      <>
+                        <td className="py-2 px-4"><input type="text" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-4">
+                          <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })} className="w-full border rounded px-2 py-1 text-sm">
+                            <option value="Quarry">Quarry</option>
+                            <option value="Sand & Gravel Pit">Sand & Gravel Pit</option>
+                            <option value="Recycling Facility">Recycling Facility</option>
+                            <option value="Dump Site">Dump Site</option>
+                          </select>
+                        </td>
+                        <td className="py-2 px-4"><input type="text" value={editForm.address || ''} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-4"><input type="text" value={editForm.city || ''} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-4 text-center">
+                          <button onClick={saveEdit} className="p-1 text-green-600 hover:text-green-700 mr-1"><Icons.Check /></button>
+                          <button onClick={() => setEditingId(null)} className="p-1 text-red-500 hover:text-red-600"><Icons.X /></button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 px-4 font-medium">{source.name}</td>
+                        <td className="py-2 px-4"><span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{source.type}</span></td>
+                        <td className="py-2 px-4 text-gray-600">{source.address}</td>
+                        <td className="py-2 px-4">{source.city}</td>
+                        <td className="py-2 px-4 text-center">
+                          <button onClick={() => startEdit(source)} className="p-1 text-tc-orange hover:text-orange-600"><Icons.Edit /></button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================
+    // PRICING MATRIX MANAGER
+    // ============================================
+    const PricingMatrixManager = ({ materials, sources, onUpdateMaterial, onAddMaterial }) => {
+      const [editingId, setEditingId] = useState(null);
+      const [editForm, setEditForm] = useState({});
+      const [showAddForm, setShowAddForm] = useState(false);
+      const [newMaterial, setNewMaterial] = useState({ materialName: '', sourceLocationId: '', materialType: 'aggregate', unit: 'Tons', basePrice: '' });
+      const [filterSource, setFilterSource] = useState('all');
+
+      const getSourceName = (id) => sources.find(s => s._id === id)?.name || 'Unknown';
+
+      const filteredMaterials = filterSource === 'all' ? materials : materials.filter(m => m.sourceLocationId === filterSource);
+
+      const startEdit = (mat) => {
+        setEditingId(mat._id);
+        setEditForm({ ...mat });
+      };
+
+      const saveEdit = () => {
+        onUpdateMaterial({ ...editForm, basePrice: parseFloat(editForm.basePrice) || 0 });
+        setEditingId(null);
+      };
+
+      const handleAddMaterial = () => {
+        if (!newMaterial.materialName || !newMaterial.sourceLocationId) { alert('Material name and source are required'); return; }
+        onAddMaterial({
+          _id: Date.now().toString(),
+          ...newMaterial,
+          basePrice: parseFloat(newMaterial.basePrice) || 0,
+          active: true
+        });
+        setNewMaterial({ materialName: '', sourceLocationId: '', materialType: 'aggregate', unit: 'Tons', basePrice: '' });
+        setShowAddForm(false);
+      };
+
+      return (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b flex flex-wrap gap-3 justify-between items-center">
+            <h3 className="font-semibold text-tc-blue flex items-center gap-2"><Icons.Package /> Pricing Matrix ({materials.length} materials)</h3>
+            <div className="flex gap-2">
+              <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="border rounded px-3 py-1.5 text-sm">
+                <option value="all">All Sources</option>
+                {sources.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+              </select>
+              <button onClick={() => setShowAddForm(true)} className="flex items-center gap-1 px-3 py-1.5 bg-tc-orange text-white rounded text-sm hover:bg-orange-600">
+                <Icons.Plus /> Add Material
+              </button>
+            </div>
+          </div>
+
+          {showAddForm && (
+            <div className="p-4 bg-green-50 border-b">
+              <h4 className="font-medium mb-3">Add New Material</h4>
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+                <input type="text" value={newMaterial.materialName} onChange={(e) => setNewMaterial({ ...newMaterial, materialName: e.target.value })} placeholder="Material Name *" className="border rounded px-3 py-2 text-sm md:col-span-2" />
+                <select value={newMaterial.sourceLocationId} onChange={(e) => setNewMaterial({ ...newMaterial, sourceLocationId: e.target.value })} className="border rounded px-3 py-2 text-sm">
+                  <option value="">Select Source *</option>
+                  {sources.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                </select>
+                <select value={newMaterial.materialType} onChange={(e) => setNewMaterial({ ...newMaterial, materialType: e.target.value })} className="border rounded px-3 py-2 text-sm">
+                  <option value="aggregate">Aggregate</option>
+                  <option value="base">Base</option>
+                  <option value="sand">Sand</option>
+                  <option value="soil">Soil</option>
+                  <option value="haul_off">Haul Off</option>
+                </select>
+                <select value={newMaterial.unit} onChange={(e) => setNewMaterial({ ...newMaterial, unit: e.target.value })} className="border rounded px-3 py-2 text-sm">
+                  <option value="Tons">Tons</option>
+                  <option value="CY">CY</option>
+                </select>
+                <input type="number" value={newMaterial.basePrice} onChange={(e) => setNewMaterial({ ...newMaterial, basePrice: e.target.value })} placeholder="Price" className="border rounded px-3 py-2 text-sm" step="0.01" />
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => setShowAddForm(false)} className="px-4 py-1.5 border rounded text-sm hover:bg-white">Cancel</button>
+                <button onClick={handleAddMaterial} className="px-4 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700">Save Material</button>
+              </div>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-tc-blue text-white">
+                <tr>
+                  <th className="py-2 px-4 text-left">Material</th>
+                  <th className="py-2 px-4 text-left">Source</th>
+                  <th className="py-2 px-4 text-center">Type</th>
+                  <th className="py-2 px-4 text-center">Unit</th>
+                  <th className="py-2 px-4 text-right">Base Price</th>
+                  <th className="py-2 px-4 text-center w-24">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredMaterials.filter(m => m.active).map(mat => (
+                  <tr key={mat._id} className="border-b hover:bg-gray-50">
+                    {editingId === mat._id ? (
+                      <>
+                        <td className="py-2 px-4"><input type="text" value={editForm.materialName} onChange={(e) => setEditForm({ ...editForm, materialName: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-4">
+                          <select value={editForm.sourceLocationId} onChange={(e) => setEditForm({ ...editForm, sourceLocationId: e.target.value })} className="w-full border rounded px-2 py-1 text-sm">
+                            {sources.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                          </select>
+                        </td>
+                        <td className="py-2 px-4">
+                          <select value={editForm.materialType} onChange={(e) => setEditForm({ ...editForm, materialType: e.target.value })} className="w-full border rounded px-2 py-1 text-sm">
+                            <option value="aggregate">aggregate</option>
+                            <option value="base">base</option>
+                            <option value="sand">sand</option>
+                            <option value="soil">soil</option>
+                            <option value="haul_off">haul_off</option>
+                          </select>
+                        </td>
+                        <td className="py-2 px-4">
+                          <select value={editForm.unit} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })} className="w-full border rounded px-2 py-1 text-sm">
+                            <option value="Tons">Tons</option>
+                            <option value="CY">CY</option>
+                          </select>
+                        </td>
+                        <td className="py-2 px-4"><input type="number" value={editForm.basePrice} onChange={(e) => setEditForm({ ...editForm, basePrice: e.target.value })} className="w-full border rounded px-2 py-1 text-sm text-right" step="0.01" /></td>
+                        <td className="py-2 px-4 text-center">
+                          <button onClick={saveEdit} className="p-1 text-green-600 hover:text-green-700 mr-1"><Icons.Check /></button>
+                          <button onClick={() => setEditingId(null)} className="p-1 text-red-500 hover:text-red-600"><Icons.X /></button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 px-4 font-medium">{mat.materialName}</td>
+                        <td className="py-2 px-4 text-gray-600">{getSourceName(mat.sourceLocationId)}</td>
+                        <td className="py-2 px-4 text-center"><span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{mat.materialType}</span></td>
+                        <td className="py-2 px-4 text-center">{mat.unit}</td>
+                        <td className="py-2 px-4 text-right font-medium">{formatCurrency(mat.basePrice)}</td>
+                        <td className="py-2 px-4 text-center">
+                          <button onClick={() => startEdit(mat)} className="p-1 text-tc-orange hover:text-orange-600"><Icons.Edit /></button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================
+    // LINE ITEM ROW
+    // ============================================
+    const LineItemRow = ({ item, index, materials, sources, onUpdate, onRemove, canBundle }) => {
+      const [selectedSource, setSelectedSource] = useState(item.sourceLocationId || '');
+      const filteredMaterials = selectedSource ? materials.filter(m => m.sourceLocationId === selectedSource && m.active) : materials.filter(m => m.active);
+      const getSourceName = (id) => sources.find(s => s._id === id)?.name || '';
+
+      const handleMaterialSelect = (materialId) => {
+        if (materialId === 'custom') {
+          onUpdate(index, { ...item, materialId: null });
+          return;
+        }
+        const material = materials.find(m => m._id === materialId);
+        if (material) {
+          onUpdate(index, { ...item, materialId, sourceLocationId: material.sourceLocationId, description: material.materialName, unit: material.unit, priceEach: material.basePrice, priceTotal: item.quantity * material.basePrice });
+        }
+      };
+
+      return (
+        <tr className={`border-b hover:bg-gray-50 ${item.bundleWithPrevious ? 'bg-orange-50' : ''}`}>
+          <td className="py-2 px-2 text-center text-gray-500">
+            {item.bundleWithPrevious ? <span className="text-tc-orange text-xs">↳</span> : index + 1}
+          </td>
+          <td className="py-2 px-2">
+            <select value={selectedSource} onChange={(e) => setSelectedSource(e.target.value)} className="w-full border rounded px-2 py-1 text-sm mb-1">
+              <option value="">All Sources</option>
+              {sources.filter(s => s.active).map(source => <option key={source._id} value={source._id}>{source.name}</option>)}
+            </select>
+            <select value={item.materialId || ''} onChange={(e) => handleMaterialSelect(e.target.value)} className="w-full border rounded px-2 py-1 text-sm">
+              <option value="">Select material...</option>
+              {filteredMaterials.map(mat => <option key={mat._id} value={mat._id}>{mat.materialName} - ${mat.basePrice}/{mat.unit}</option>)}
+              <option value="custom">-- Custom Item --</option>
+            </select>
+          </td>
+          <td className="py-2 px-2">
+            <input type="text" value={item.description} onChange={(e) => onUpdate(index, { ...item, description: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" placeholder="Description" />
+            {canBundle && (
+              <label className={`flex items-center gap-2 mt-1 text-xs cursor-pointer p-1 rounded ${item.bundleWithPrevious ? 'bg-orange-100 border border-orange-300' : ''}`}>
+                <input 
+                  type="checkbox" 
+                  checked={item.bundleWithPrevious || false} 
+                  onChange={(e) => onUpdate(index, { ...item, bundleWithPrevious: e.target.checked })}
+                  className="rounded border-gray-300 text-tc-orange focus:ring-tc-orange"
+                />
+                <span className={item.bundleWithPrevious ? 'text-orange-700 font-semibold' : 'text-gray-600'}>
+                  {item.bundleWithPrevious ? '✓ Will bundle into line above' : 'Bundle into line above (hide on quote)'}
+                </span>
+              </label>
+            )}
+          </td>
+          <td className="py-2 px-2"><input type="number" value={item.quantity || ''} onChange={(e) => { const qty = parseFloat(e.target.value) || 0; onUpdate(index, { ...item, quantity: qty, priceTotal: qty * item.priceEach }); }} className="w-full border rounded px-2 py-1 text-sm text-right min-w-[100px]" /></td>
+          <td className="py-2 px-2">
+            <select value={item.unit} onChange={(e) => onUpdate(index, { ...item, unit: e.target.value })} className="w-full border rounded px-2 py-1 text-sm min-w-[70px]">
+              <option value="Tons">Tons</option><option value="CY">CY</option>
+            </select>
+          </td>
+          <td className="py-2 px-2"><input type="number" value={item.priceEach || ''} onChange={(e) => { const price = parseFloat(e.target.value) || 0; onUpdate(index, { ...item, priceEach: price, priceTotal: item.quantity * price }); }} className="w-full border rounded px-2 py-1 text-sm text-right" step="0.01" /></td>
+          <td className="py-2 px-2 text-right font-medium">{formatCurrency(item.priceTotal || 0)}</td>
+          <td className="py-2 px-2 text-center"><button onClick={() => onRemove(index)} className="text-red-500 hover:text-red-700"><Icons.Trash /></button></td>
+        </tr>
+      );
+    };
+
+    // ============================================
+    // QUOTE PREVIEW - Combines bundled items for customer view
+    // ============================================
+    const QuotePreview = ({ quote, onClose, onSign, onSend }) => {
+      const [tcSignature, setTcSignature] = useState(quote.tcSignature || '');
+      const [tcSignDate, setTcSignDate] = useState(quote.tcSignDate || '');
+      const [customerSignature, setCustomerSignature] = useState(quote.customerSignature || '');
+      const [customerSignDate, setCustomerSignDate] = useState(quote.customerSignDate || '');
+      const [showSigningPanel, setShowSigningPanel] = useState(false);
+      const [isSigned, setIsSigned] = useState(!!(quote.tcSignature));
+
+      if (!quote) return null;
+
+      // Process line items to combine bundled ones
+      const getDisplayLineItems = () => {
+        const displayItems = [];
+        
+        for (let i = 0; i < quote.lineItems.length; i++) {
+          const item = quote.lineItems[i];
+          
+          if (item.bundleWithPrevious && displayItems.length > 0) {
+            // Add this item's unit price to the previous item
+            const prevItem = displayItems[displayItems.length - 1];
+            prevItem.priceEach = (prevItem.priceEach || 0) + (item.priceEach || 0);
+            prevItem.priceTotal = prevItem.quantity * prevItem.priceEach;
+          } else {
+            // Add as new item (clone to avoid mutating original)
+            displayItems.push({ ...item });
+          }
+        }
+        
+        return displayItems;
+      };
+
+      const displayItems = getDisplayLineItems();
+      const displaySubtotal = displayItems.reduce((sum, item) => sum + (item.priceTotal || 0), 0);
+      const hasBundledItems = quote.lineItems.some(item => item.bundleWithPrevious);
+
+      const handleSignAndSave = () => {
+        if (!tcSignature.trim()) {
+          alert('Please type your name to sign');
+          return;
+        }
+        const sigData = {
+          tcSignature,
+          tcSignDate: tcSignDate || new Date().toISOString().split('T')[0],
+          customerSignature,
+          customerSignDate
+        };
+        if (onSign) {
+          onSign(sigData);
+        }
+        setIsSigned(true);
+        setShowSigningPanel(false);
+      };
+
+      const handleSendQuote = () => {
+        if (onSend) {
+          onSend({
+            tcSignature,
+            tcSignDate: tcSignDate || new Date().toISOString().split('T')[0]
+          });
+        }
+      };
+
+      const today = new Date().toISOString().split('T')[0];
+
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-tc-blue text-white p-4 flex justify-between items-center">
+              <h3 className="font-bold">Quote Preview - {quote.quoteNumber} <span className="text-sm font-normal opacity-75">(Customer View)</span></h3>
+              <div className="flex gap-2">
+                {/* Show Sign button only if not signed and onSign is available */}
+                {onSign && !isSigned && (
+                  <button onClick={() => setShowSigningPanel(!showSigningPanel)} className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 text-sm">
+                    <Icons.Edit /> Sign
+                  </button>
+                )}
+                {/* Always show Print */}
+                <button onClick={() => window.print()} className="px-3 py-1 bg-white text-tc-blue rounded hover:bg-gray-100 flex items-center gap-1 text-sm">
+                  <Icons.Printer /> Print
+                </button>
+                {/* Show Save & Send after signing */}
+                {isSigned && onSend && (
+                  <button onClick={handleSendQuote} className="px-3 py-1 bg-tc-orange text-white rounded hover:bg-orange-600 flex items-center gap-1 text-sm">
+                    <Icons.Send /> Save & Send
+                  </button>
+                )}
+                <button onClick={onClose} className="hover:text-gray-300"><Icons.X /></button>
+              </div>
+            </div>
+            
+            {/* Signing Panel */}
+            {showSigningPanel && onSign && !isSigned && (
+              <div className="bg-green-50 border-b border-green-200 p-4 no-print">
+                <h4 className="font-semibold text-green-800 mb-3">Sign Quote Before Sending</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 mb-1">T&C Materials Signature</label>
+                    <input type="text" value={tcSignature} onChange={(e) => setTcSignature(e.target.value)} placeholder="Type your name to sign" className="w-full border border-gray-300 rounded px-3 py-2 text-sm italic" style={{fontFamily: 'cursive'}} />
+                    <label className="block text-xs font-semibold text-gray-700 mb-1 mt-2">Date</label>
+                    <input type="date" value={tcSignDate || today} onChange={(e) => setTcSignDate(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
+                  </div>
+                  <div className="flex flex-col justify-between">
+                    <p className="text-xs text-gray-600"><strong>Note:</strong> Your signature will appear on the quote sent to the customer.</p>
+                    <button onClick={handleSignAndSave} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium">
+                      <Icons.Check /> Apply Signature
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Signed confirmation banner */}
+            {isSigned && (
+              <div className="bg-green-100 border-b border-green-300 p-2 text-center text-green-800 text-sm no-print">
+                <strong>✓ Signed by {tcSignature}</strong> on {tcSignDate || today} — Ready to send!
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-6 quote-preview text-sm">
+              {hasBundledItems && (
+                <div className="bg-orange-50 border border-orange-200 rounded p-3 mb-4 text-xs text-orange-800 no-print">
+                  <strong>✓ Bundled Pricing Applied</strong>
+                  <p className="mt-1">Transportation costs have been added to material unit prices. Customer sees single delivered price per unit.</p>
+                </div>
+              )}
+              <div className="text-center mb-4">
+                <img src="/tc-logo-dark.png" alt="T&C Materials, LLC" className="h-16 mx-auto mb-2" />
+                <p className="font-bold text-lg">QUOTATION</p>
+              </div>
+              <div className="border text-xs mb-4">
+                <div className="grid grid-cols-2">
+                  <div className="border-r border-b p-2"><strong>Bid Date:</strong> {formatDate(quote.bidDate)}</div>
+                  <div className="border-b p-2"><strong>Quote #:</strong> {quote.quoteNumber}{quote.revisionNumber > 0 ? `(R${quote.revisionNumber})` : ''}</div>
+                  <div className="border-r border-b p-2"><strong>Customer:</strong> {quote.customerSnapshot?.companyName}</div>
+                  <div className="border-b p-2"><strong>Sales Rep:</strong> {quote.salesRepSnapshot?.name}</div>
+                  <div className="border-r border-b p-2"><strong>Attn:</strong> {quote.customerSnapshot?.contactName}</div>
+                  <div className="border-b p-2"><strong>Email:</strong> {quote.salesRepSnapshot?.email}</div>
+                  <div className="border-r border-b p-2"><strong>Expiration:</strong> {formatDate(quote.expirationDate)}</div>
+                  <div className="border-b p-2"><strong>Delivery:</strong> {quote.deliveryMethod}</div>
+                  <div className="border-r p-2"><strong>Project:</strong> {quote.projectName}</div>
+                  <div className="p-2"><strong>Terms:</strong> {quote.paymentTerms}</div>
+                </div>
+              </div>
+              <table className="w-full border text-xs mb-4">
+                <thead className="bg-gray-100">
+                  <tr><th className="border p-1.5 text-left">Item</th><th className="border p-1.5 w-16">QTY</th><th className="border p-1.5 w-14">Unit</th><th className="border p-1.5 w-24 text-right">Price Each</th><th className="border p-1.5 w-28 text-right">Total</th></tr>
+                </thead>
+                <tbody>
+                  {displayItems.map((item, idx) => (
+                    <tr key={idx}><td className="border p-1.5">{item.description}</td><td className="border p-1.5 text-center">{item.quantity?.toLocaleString()}</td><td className="border p-1.5 text-center">{item.unit}</td><td className="border p-1.5 text-right">{formatCurrency(item.priceEach)}</td><td className="border p-1.5 text-right">{formatCurrency(item.priceTotal)}</td></tr>
+                  ))}
+                  <tr className="bg-gray-100 font-bold"><td colSpan="4" className="border p-1.5 text-right">SUBTOTAL:</td><td className="border p-1.5 text-right">{formatCurrency(displaySubtotal)}</td></tr>
+                </tbody>
+              </table>
+              {quote.scopeOfWork && <div className="mb-4"><p className="font-bold text-xs">Scope of Work:</p><p className="text-xs whitespace-pre-wrap">{quote.scopeOfWork}</p></div>}
+              <div className="text-xs"><p className="font-bold mb-1">TERMS AND CONDITIONS</p><p className="text-[10px]">{TERMS_CONDITIONS}</p><p className="text-[10px] font-bold mt-2">{TAX_DISCLAIMER}</p></div>
+              
+              {/* Signature Section */}
+              <div className="grid grid-cols-2 gap-8 mt-6 text-xs border-t pt-4">
+                <div>
+                  <p className="font-bold mb-2">Customer Acceptance:</p>
+                  <div className="border-b border-gray-400 h-8 mb-1 flex items-end">
+                    {(customerSignature || quote.customerSignature) && (
+                      <span className="italic text-lg" style={{fontFamily: 'cursive'}}>{customerSignature || quote.customerSignature}</span>
+                    )}
+                  </div>
+                  <p className="text-gray-500">Signature</p>
+                  <div className="border-b border-gray-400 h-6 mt-3 mb-1 flex items-end">
+                    <span>{customerSignDate || quote.customerSignDate || ''}</span>
+                  </div>
+                  <p className="text-gray-500">Date</p>
+                </div>
+                <div>
+                  <p className="font-bold mb-2">T&C Materials, LLC:</p>
+                  <div className="border-b border-gray-400 h-8 mb-1 flex items-end">
+                    {(tcSignature || quote.tcSignature) && (
+                      <span className="italic text-lg" style={{fontFamily: 'cursive'}}>{tcSignature || quote.tcSignature}</span>
+                    )}
+                  </div>
+                  <p className="text-gray-500">Signature</p>
+                  <div className="border-b border-gray-400 h-6 mt-3 mb-1 flex items-end">
+                    <span>{tcSignDate || quote.tcSignDate || ''}</span>
+                  </div>
+                  <p className="text-gray-500">Date</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================
+    // QUOTE FORM
+    // ============================================
+    const QuoteForm = ({ quote, customers, materials, sources, currentUser, onSave, onCancel, onShowCalc, onAddCustomer, calcRate }) => {
+      const today = new Date().toISOString().split('T')[0];
+      const thirtyDays = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      
+      const [formData, setFormData] = useState({
+        quoteNumber: quote?.quoteNumber || generateQuoteNumber(),
+        revisionNumber: quote?.revisionNumber || 0,
+        status: quote?.status || 'draft',
+        bidDate: quote?.bidDate || today,
+        expirationDate: quote?.expirationDate || thirtyDays,
+        customerId: quote?.customerId || '',
+        customerSnapshot: quote?.customerSnapshot || null,
+        projectName: quote?.projectName || '',
+        projectAddress: quote?.projectAddress || '',
+        deliveryMethod: quote?.deliveryMethod || 'End Dumps',
+        taxExemptStatus: quote?.taxExemptStatus || 'TBD',
+        paymentTerms: quote?.paymentTerms || 'Net 30',
+        lineItems: quote?.lineItems || [],
+        scopeOfWork: quote?.scopeOfWork || '',
+        salesRepSnapshot: quote?.salesRepSnapshot || { name: currentUser.name, phone: currentUser.phone, email: currentUser.email }
+      });
+
+      const [selectedCustomer, setSelectedCustomer] = useState(quote?.customerId ? customers.find(c => c._id === quote.customerId) : null);
+      const [showPreview, setShowPreview] = useState(false);
+
+      // Handle calculator rate being applied - add as new line item with auto-bundle
+      useEffect(() => {
+        if (calcRate && calcRate.costPerUnit && calcRate.timestamp) {
+          const newItem = {
+            itemNumber: formData.lineItems.length + 1,
+            materialId: null,
+            description: calcRate.description || 'Trucking / Hauling',
+            quantity: 0,
+            unit: calcRate.unit,
+            priceEach: calcRate.costPerUnit,
+            priceTotal: 0,
+            bundleWithPrevious: formData.lineItems.length > 0 // Auto-bundle if there's a line above
+          };
+          setFormData(prev => ({
+            ...prev,
+            lineItems: [...prev.lineItems, newItem]
+          }));
+        }
+      }, [calcRate?.timestamp]);
+
+      const handleCustomerSelect = (customer) => {
+        setSelectedCustomer(customer);
+        const contact = customer.contacts.find(c => c.isPrimary) || customer.contacts[0];
+        setFormData({
+          ...formData,
+          customerId: customer._id,
+          customerSnapshot: { companyName: customer.companyName, shortName: customer.shortName, contactName: contact?.name || '', contactEmail: contact?.email || '', contactPhone: contact?.phone || '', address: customer.address || '' },
+          paymentTerms: customer.paymentTerms || 'Net 30'
+        });
+      };
+
+      const addLineItem = () => setFormData({ ...formData, lineItems: [...formData.lineItems, { itemNumber: formData.lineItems.length + 1, materialId: null, description: '', quantity: 0, unit: 'Tons', priceEach: 0, priceTotal: 0 }] });
+      const updateLineItem = (idx, item) => { const items = [...formData.lineItems]; items[idx] = { ...item, itemNumber: idx + 1 }; setFormData({ ...formData, lineItems: items }); };
+      const removeLineItem = (idx) => setFormData({ ...formData, lineItems: formData.lineItems.filter((_, i) => i !== idx).map((item, i) => ({ ...item, itemNumber: i + 1 })) });
+      const subtotal = formData.lineItems.reduce((sum, item) => sum + (item.priceTotal || 0), 0);
+
+      const handleSave = (send = false) => {
+        if (!selectedCustomer) { alert('Please select a customer'); return; }
+        if (!formData.projectName) { alert('Please enter a project name'); return; }
+        if (formData.lineItems.length === 0) { alert('Please add at least one line item'); return; }
+        onSave({ ...formData, subtotal, status: send ? 'sent' : 'draft' }, send);
+      };
+
+      return (
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-tc-blue">{quote?._id ? 'Edit' : 'New'} Quote - {formData.quoteNumber}{formData.revisionNumber > 0 && <span className="text-tc-orange ml-2">(R{formData.revisionNumber})</span>}</h2>
+            <div className="flex gap-2">
+              <button onClick={() => setShowPreview(true)} className="flex items-center gap-1 px-3 py-2 border rounded hover:bg-gray-50 text-sm"><Icons.Eye /> Preview</button>
+              <button onClick={onShowCalc} className="flex items-center gap-1 px-3 py-2 bg-gray-100 rounded hover:bg-gray-200 text-sm"><Icons.Calculator /> Calculator</button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div><label className="block text-xs font-medium mb-1">Bid Date</label><input type="date" value={formData.bidDate} onChange={(e) => setFormData({ ...formData, bidDate: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Expiration</label><input type="date" value={formData.expirationDate} onChange={(e) => setFormData({ ...formData, expirationDate: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Delivery</label>
+              <select value={formData.deliveryMethod} onChange={(e) => setFormData({ ...formData, deliveryMethod: e.target.value })} className="w-full border rounded px-3 py-2 text-sm">
+                <option>End Dumps</option><option>Tandem</option><option>Flatbed</option><option>Customer Pickup</option>
+              </select>
+            </div>
+            <div><label className="block text-xs font-medium mb-1">Tax Exempt</label>
+              <select value={formData.taxExemptStatus} onChange={(e) => setFormData({ ...formData, taxExemptStatus: e.target.value })} className="w-full border rounded px-3 py-2 text-sm">
+                <option value="TBD">TBD</option><option value="Yes">Yes</option><option value="No">No</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <CustomerSelect customers={customers} selectedCustomer={selectedCustomer} onSelect={handleCustomerSelect} onAddCustomer={onAddCustomer} />
+            <div><label className="block text-xs font-medium mb-1">Project Name *</label><input type="text" value={formData.projectName} onChange={(e) => setFormData({ ...formData, projectName: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" placeholder="Enter project name" /></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div><label className="block text-xs font-medium mb-1">Attention</label><input type="text" value={formData.customerSnapshot?.contactName || ''} onChange={(e) => setFormData({ ...formData, customerSnapshot: { ...formData.customerSnapshot, contactName: e.target.value } })} className="w-full border rounded px-3 py-2 text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Project Address</label><input type="text" value={formData.projectAddress} onChange={(e) => setFormData({ ...formData, projectAddress: e.target.value })} className="w-full border rounded px-3 py-2 text-sm" /></div>
+            <div><label className="block text-xs font-medium mb-1">Payment Terms</label>
+              <select value={formData.paymentTerms} onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })} className="w-full border rounded px-3 py-2 text-sm">
+                <option>Net 30</option><option>Net 15</option><option>Net 45</option><option>COD</option><option>Due on Receipt</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold text-tc-blue">Line Items</h3>
+              <button onClick={addLineItem} className="flex items-center gap-1 text-tc-orange hover:text-orange-600 text-sm"><Icons.Plus /> Add Item</button>
+            </div>
+            <div className="overflow-x-auto border rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-tc-blue text-white">
+                  <tr><th className="py-2 px-2 w-10">#</th><th className="py-2 px-2 text-left w-44">Source/Material</th><th className="py-2 px-2 text-left">Description</th><th className="py-2 px-2 w-28">Qty</th><th className="py-2 px-2 w-20">Unit</th><th className="py-2 px-2 w-24">$/Unit</th><th className="py-2 px-2 w-28">Total</th><th className="py-2 px-2 w-10"></th></tr>
+                </thead>
+                <tbody>
+                  {formData.lineItems.map((item, idx) => <LineItemRow key={idx} item={item} index={idx} materials={materials} sources={sources} onUpdate={updateLineItem} onRemove={removeLineItem} canBundle={idx > 0} />)}
+                  {formData.lineItems.length === 0 && <tr><td colSpan="8" className="py-6 text-center text-gray-400">No items. Click "Add Item" to begin.</td></tr>}
+                </tbody>
+                <tfoot className="bg-gray-100 font-semibold"><tr><td colSpan="6" className="py-2 px-2 text-right">Subtotal:</td><td className="py-2 px-2 text-right text-lg text-tc-blue">{formatCurrency(subtotal)}</td><td></td></tr></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div className="mb-4"><label className="block text-xs font-medium mb-1">Scope of Work</label><textarea value={formData.scopeOfWork} onChange={(e) => setFormData({ ...formData, scopeOfWork: e.target.value })} className="w-full border rounded px-3 py-2 text-sm h-20" placeholder="Enter scope details..." /></div>
+
+          <div className="flex justify-between pt-4 border-t">
+            <button onClick={onCancel} className="px-4 py-2 border rounded hover:bg-gray-50 text-sm">Cancel</button>
+            <div className="flex gap-2">
+              <button onClick={() => handleSave(false)} className="flex items-center gap-1 px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"><Icons.Save /> Save Draft</button>
+              <button onClick={() => handleSave(true)} className="flex items-center gap-1 px-4 py-2 bg-tc-orange text-white rounded hover:bg-orange-600 text-sm"><Icons.Send /> Save & Send</button>
+            </div>
+          </div>
+
+          {showPreview && <QuotePreview quote={{ ...formData, subtotal }} onClose={() => setShowPreview(false)} onSign={(sigData) => setFormData({ ...formData, ...sigData })} onSend={(sigData) => { setFormData({ ...formData, ...sigData }); handleSave(true); }} />}
+        </div>
+      );
+    };
+
+    // ============================================
+    // QUOTE LOG
+    // ============================================
+    const QuoteLog = ({ quotes, onEdit, onRevise, onNew }) => {
+      const [search, setSearch] = useState('');
+      const [previewQuote, setPreviewQuote] = useState(null);
+
+      const filtered = quotes.filter(q => 
+        q.quoteNumber.toLowerCase().includes(search.toLowerCase()) || 
+        q.projectName.toLowerCase().includes(search.toLowerCase()) || 
+        q.customerSnapshot?.companyName?.toLowerCase().includes(search.toLowerCase())
+      ).sort((a, b) => new Date(b.createdAt || b.bidDate) - new Date(a.createdAt || a.bidDate));
+
+      const statusBadge = (s) => {
+        const styles = { draft: 'bg-gray-100 text-gray-700', sent: 'bg-blue-100 text-blue-700', accepted: 'bg-green-100 text-green-700' };
+        return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${styles[s] || styles.draft}`}>{s}</span>;
+      };
+
+      return (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b flex flex-wrap gap-3 items-center">
+            <div className="flex-1 min-w-64 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Icons.Search /></span>
+              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search quotes..." className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm" />
+            </div>
+            <button onClick={onNew} className="flex items-center gap-1 px-4 py-2 bg-tc-orange text-white rounded-lg hover:bg-orange-600 text-sm"><Icons.Plus /> New Quote</button>
+          </div>
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-gray-500">No quotes found. Create your first quote!</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-tc-blue text-white">
+                  <tr><th className="py-2 px-3 text-left">Quote #</th><th className="py-2 px-3 text-left">Customer</th><th className="py-2 px-3 text-left">Project</th><th className="py-2 px-3 text-right">Amount</th><th className="py-2 px-3 text-center">Status</th><th className="py-2 px-3 text-left">Date</th><th className="py-2 px-3 text-center">Actions</th></tr>
+                </thead>
+                <tbody>
+                  {filtered.map(q => (
+                    <tr key={q._id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => setPreviewQuote(q)}>
+                      <td className="py-2 px-3 font-medium">{q.quoteNumber}{q.revisionNumber > 0 && <span className="text-tc-orange">(R{q.revisionNumber})</span>}</td>
+                      <td className="py-2 px-3">{q.customerSnapshot?.shortName}</td>
+                      <td className="py-2 px-3">{q.projectName}</td>
+                      <td className="py-2 px-3 text-right font-medium">{formatCurrency(q.subtotal)}</td>
+                      <td className="py-2 px-3 text-center">{statusBadge(q.status)}</td>
+                      <td className="py-2 px-3 text-xs">{formatDate(q.bidDate)}</td>
+                      <td className="py-2 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <button onClick={() => setPreviewQuote(q)} className="p-1 text-gray-500 hover:text-blue-600"><Icons.Eye /></button>
+                        <button onClick={() => onEdit(q)} className="p-1 text-gray-500 hover:text-green-600"><Icons.Edit /></button>
+                        <button onClick={() => onRevise(q)} className="p-1 text-gray-500 hover:text-tc-orange"><Icons.Copy /></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="p-3 border-t bg-gray-50 grid grid-cols-4 gap-3 text-center text-xs">
+            <div><p className="text-gray-500">Total</p><p className="text-lg font-bold text-tc-blue">{quotes.length}</p></div>
+            <div><p className="text-gray-500">Drafts</p><p className="text-lg font-bold text-gray-600">{quotes.filter(q => q.status === 'draft').length}</p></div>
+            <div><p className="text-gray-500">Sent</p><p className="text-lg font-bold text-blue-600">{quotes.filter(q => q.status === 'sent').length}</p></div>
+            <div><p className="text-gray-500">Value</p><p className="text-lg font-bold text-tc-orange">{formatCurrency(quotes.reduce((s, q) => s + (q.subtotal || 0), 0))}</p></div>
+          </div>
+          {previewQuote && <QuotePreview quote={previewQuote} onClose={() => setPreviewQuote(null)} />}
+        </div>
+      );
+    };
+
+    // ============================================
+    // CUSTOMERS PAGE
+    // ============================================
+    const CustomersPage = ({ customers, onUpdate }) => {
+      const [editingId, setEditingId] = useState(null);
+      const [editForm, setEditForm] = useState({});
+
+      const startEdit = (c) => { setEditingId(c._id); setEditForm({ ...c, contactName: c.contacts[0]?.name || '', contactPhone: c.contacts[0]?.phone || '', contactEmail: c.contacts[0]?.email || '' }); };
+      const saveEdit = () => {
+        onUpdate({ ...editForm, contacts: [{ name: editForm.contactName, phone: editForm.contactPhone, email: editForm.contactEmail, isPrimary: true }] });
+        setEditingId(null);
+      };
+
+      return (
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b"><h3 className="font-semibold text-tc-blue">Customer Database ({customers.length})</h3></div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-tc-blue text-white">
+                <tr><th className="py-2 px-3 text-left">Short</th><th className="py-2 px-3 text-left">Company</th><th className="py-2 px-3 text-left">Address</th><th className="py-2 px-3 text-left">Contact</th><th className="py-2 px-3 text-left">Phone</th><th className="py-2 px-3 text-left">Email</th><th className="py-2 px-3 w-20">Actions</th></tr>
+              </thead>
+              <tbody>
+                {customers.map(c => (
+                  <tr key={c._id} className="border-b hover:bg-gray-50">
+                    {editingId === c._id ? (
+                      <>
+                        <td className="py-2 px-3"><input type="text" value={editForm.shortName} onChange={(e) => setEditForm({ ...editForm, shortName: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-3"><input type="text" value={editForm.companyName} onChange={(e) => setEditForm({ ...editForm, companyName: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-3"><input type="text" value={editForm.address || ''} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-3"><input type="text" value={editForm.contactName} onChange={(e) => setEditForm({ ...editForm, contactName: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-3"><input type="text" value={editForm.contactPhone} onChange={(e) => setEditForm({ ...editForm, contactPhone: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-3"><input type="text" value={editForm.contactEmail} onChange={(e) => setEditForm({ ...editForm, contactEmail: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" /></td>
+                        <td className="py-2 px-3 text-center">
+                          <button onClick={saveEdit} className="p-1 text-green-600"><Icons.Check /></button>
+                          <button onClick={() => setEditingId(null)} className="p-1 text-red-500"><Icons.X /></button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2 px-3 font-medium">{c.shortName}</td>
+                        <td className="py-2 px-3">{c.companyName}</td>
+                        <td className="py-2 px-3 text-xs text-gray-600">{c.address}</td>
+                        <td className="py-2 px-3">{c.contacts[0]?.name}</td>
+                        <td className="py-2 px-3 text-xs">{c.contacts[0]?.phone}</td>
+                        <td className="py-2 px-3 text-xs">{c.contacts[0]?.email}</td>
+                        <td className="py-2 px-3 text-center"><button onClick={() => startEdit(c)} className="p-1 text-tc-orange hover:text-orange-600"><Icons.Edit /></button></td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    };
+
+    // ============================================
+    // MAIN APP
+    // ============================================
+    const App = () => {
+      const [data, setData] = useState(getInitialData);
+      const [user, setUser] = useState(null);
+      const [page, setPage] = useState('quotes');
+      const [showForm, setShowForm] = useState(false);
+      const [editQuote, setEditQuote] = useState(null);
+      const [showCalc, setShowCalc] = useState(false);
+      const [calcRate, setCalcRate] = useState(null);
+      const [sidebar, setSidebar] = useState(true);
+      const [login, setLogin] = useState({ username: '', password: '' });
+
+      useEffect(() => { saveToStorage(data); }, [data]);
+
+      const handleLogin = (e) => { e.preventDefault(); setUser(data.users.find(u => u.username === login.username) || data.users[0]); };
+      
+      const addCustomer = (c) => setData({ ...data, customers: [...data.customers, c] });
+      const updateCustomer = (c) => setData({ ...data, customers: data.customers.map(x => x._id === c._id ? c : x) });
+      const updateSource = (s) => setData({ ...data, sourceLocations: data.sourceLocations.map(x => x._id === s._id ? s : x) });
+      const addSource = (s) => setData({ ...data, sourceLocations: [...data.sourceLocations, s] });
+      const updateMaterial = (m) => setData({ ...data, materials: data.materials.map(x => x._id === m._id ? m : x) });
+      const addMaterial = (m) => setData({ ...data, materials: [...data.materials, m] });
+
+      const saveQuote = (q, send) => {
+        if (editQuote?._id) {
+          setData({ ...data, quotes: data.quotes.map(x => x._id === editQuote._id ? { ...x, ...q, updatedAt: new Date().toISOString() } : x) });
+        } else {
+          setData({ ...data, quotes: [{ ...q, _id: Date.now().toString(), createdAt: new Date().toISOString() }, ...data.quotes] });
+        }
+        setShowForm(false); setEditQuote(null); setCalcRate(null);
+        if (send) alert('Quote saved! Email integration requires Brevo setup.');
+      };
+
+      const revise = (q) => { setEditQuote({ ...q, _id: null, revisionNumber: (q.revisionNumber || 0) + 1, status: 'draft', previousVersionId: q._id }); setShowForm(true); };
+
+      if (!user) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-tc-blue to-blue-800 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-8">
+              <div className="text-center mb-6">
+                <img src="/apple-touch-icon.png" alt="T&C Ez Quote" className="w-20 h-20 rounded-xl mx-auto mb-3 shadow-lg" />
+                <h1 className="text-2xl font-bold">T&C Ez Quote</h1>
+                <p className="text-gray-500 text-sm">T&C Materials, LLC</p>
+              </div>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <input type="text" value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} placeholder="Username" className="w-full border rounded-lg px-4 py-3" />
+                <input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} placeholder="Password" className="w-full border rounded-lg px-4 py-3" />
+                <button type="submit" className="w-full bg-tc-orange text-white py-3 rounded-lg font-medium hover:bg-orange-600">Sign In</button>
+              </form>
+              <p className="mt-4 text-center text-xs text-gray-500">Users: alex.saplala, corey.pelletier</p>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-gray-100 flex">
+          <aside className={`${sidebar ? 'w-56' : 'w-14'} bg-tc-blue text-white transition-all flex flex-col`}>
+            <div className="p-3 border-b border-blue-800 flex items-center gap-2">
+              <div className="w-8 h-8 bg-tc-orange rounded flex items-center justify-center flex-shrink-0"><Icons.Building /></div>
+              {sidebar && <div><h1 className="font-bold text-sm">T&C Ez Quote</h1></div>}
+            </div>
+            <nav className="flex-1 p-2 space-y-1">
+              <button onClick={() => { setPage('quotes'); setShowForm(false); }} className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm ${page === 'quotes' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}><Icons.FileText />{sidebar && 'Quote Log'}</button>
+              <button onClick={() => setPage('customers')} className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm ${page === 'customers' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}><Icons.Users />{sidebar && 'Customers'}</button>
+              <button onClick={() => setPage('pricing')} className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm ${page === 'pricing' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}><Icons.Package />{sidebar && 'Pricing'}</button>
+              <button onClick={() => setPage('sources')} className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm ${page === 'sources' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}><Icons.MapPin />{sidebar && 'Sources'}</button>
+            </nav>
+            <div className="p-2 border-t border-blue-800">
+              {sidebar && <p className="text-xs mb-2 px-2">{user.name}</p>}
+              <button onClick={() => setUser(null)} className="w-full flex items-center gap-2 px-3 py-2 rounded text-sm hover:bg-blue-800"><Icons.LogOut />{sidebar && 'Logout'}</button>
+            </div>
+          </aside>
+
+          <main className="flex-1 flex flex-col">
+            <header className="bg-white shadow-sm px-4 py-3 flex items-center gap-3">
+              <button onClick={() => setSidebar(!sidebar)} className="p-1.5 hover:bg-gray-100 rounded"><Icons.Menu /></button>
+              <h2 className="text-lg font-semibold text-tc-blue capitalize">{page === 'quotes' && !showForm ? 'Quote Log' : page === 'sources' ? 'Source Locations' : page}</h2>
+            </header>
+            <div className="flex-1 p-4 overflow-auto">
+              {page === 'quotes' && !showForm && <QuoteLog quotes={data.quotes} onEdit={(q) => { setEditQuote(q); setShowForm(true); }} onRevise={revise} onNew={() => { setEditQuote(null); setShowForm(true); }} />}
+              {page === 'quotes' && showForm && <QuoteForm quote={editQuote} customers={data.customers} materials={data.materials} sources={data.sourceLocations} currentUser={user} onSave={saveQuote} onCancel={() => { setShowForm(false); setEditQuote(null); setCalcRate(null); }} onShowCalc={() => setShowCalc(true)} onAddCustomer={addCustomer} calcRate={calcRate} />}
+              {page === 'customers' && <CustomersPage customers={data.customers} onUpdate={updateCustomer} />}
+              {page === 'pricing' && <PricingMatrixManager materials={data.materials} sources={data.sourceLocations} onUpdateMaterial={updateMaterial} onAddMaterial={addMaterial} />}
+              {page === 'sources' && <SourceLocationsManager sources={data.sourceLocations} onUpdate={updateSource} onAdd={addSource} />}
+            </div>
+          </main>
+
+          <TruckRateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} onApply={(d) => setCalcRate(d)} />
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
