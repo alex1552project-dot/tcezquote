@@ -1514,11 +1514,58 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const [showForm, setShowForm] = useState(false);
       const [editQuote, setEditQuote] = useState(null);
       const [sidebar, setSidebar] = useState(window.innerWidth > 768);
-      const [login, setLogin] = useState({ username: '', password: '' });
+      const [pinEntry, setPinEntry] = useState('');
+      const [loginError, setLoginError] = useState('');
+      const [loginLoading, setLoginLoading] = useState(false);
 
       useEffect(() => { saveToStorage(data); }, [data]);
 
-      const handleLogin = (e) => { e.preventDefault(); setUser(data.users.find(u => u.username === login.username) || data.users[0]); };
+      const handlePinKey = (digit) => {
+        if (loginLoading) return;
+        setLoginError('');
+        setPinEntry(prev => prev.length < 4 ? prev + digit : prev);
+      };
+
+      const handlePinBackspace = () => {
+        if (loginLoading) return;
+        setLoginError('');
+        setPinEntry(prev => prev.slice(0, -1));
+      };
+
+      const handlePinSubmit = async (currentPin) => {
+        const pin = currentPin || pinEntry;
+        if (pin.length !== 4 || loginLoading) return;
+        setLoginLoading(true);
+        setLoginError('');
+        try {
+          const res = await fetch('https://texasgotrocks.com/.netlify/functions/tcq-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin })
+          });
+          const d = await res.json();
+          if (d.success) {
+            setUser(d.user);
+            setPinEntry('');
+          } else {
+            setLoginError(d.error || 'Incorrect PIN');
+            setPinEntry('');
+          }
+        } catch (e) {
+          setLoginError('Connection error — try again');
+          setPinEntry('');
+        } finally {
+          setLoginLoading(false);
+        }
+      };
+
+      const handlePinDigit = (digit) => {
+        if (loginLoading) return;
+        setLoginError('');
+        const next = pinEntry.length < 4 ? pinEntry + digit : pinEntry;
+        setPinEntry(next);
+        if (next.length === 4) handlePinSubmit(next);
+      };
       
       const addCustomer = (c) => setData({ ...data, customers: [...data.customers, c] });
       const updateCustomer = (c) => setData({ ...data, customers: data.customers.map(x => x._id === c._id ? c : x) });
@@ -1589,26 +1636,63 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const revise = (q) => { setEditQuote({ ...q, _id: null, revisionNumber: (q.revisionNumber || 0) + 1, status: 'draft', previousVersionId: q._id }); setShowForm(true); };
 
       if (!user) {
+        const pinDots = Array.from({ length: 4 }, (_, i) => (
+          <div key={i} style={{
+            width: '18px', height: '18px', borderRadius: '50%',
+            background: i < pinEntry.length ? '#f97316' : 'transparent',
+            border: `2px solid ${i < pinEntry.length ? '#f97316' : '#cbd5e1'}`,
+            transition: 'all 0.15s'
+          }} />
+        ));
+
+        const PinKey = ({ label, onClick, style = {} }) => (
+          <button
+            onClick={onClick}
+            disabled={loginLoading}
+            style={{
+              width: '72px', height: '72px', borderRadius: '50%',
+              border: '2px solid #e2e8f0', background: '#fff',
+              fontSize: '24px', fontWeight: '700', color: '#1e3a5f',
+              cursor: loginLoading ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'background 0.1s', ...style
+            }}
+            onMouseDown={e => e.currentTarget.style.background = '#f1f5f9'}
+            onMouseUp={e => e.currentTarget.style.background = '#fff'}
+            onTouchStart={e => e.currentTarget.style.background = '#f1f5f9'}
+            onTouchEnd={e => { e.currentTarget.style.background = '#fff'; onClick(); }}
+          >{label}</button>
+        );
+
         return (
-          <div className="min-h-screen bg-gradient-to-br from-tc-blue to-blue-900 flex items-center justify-center p-6">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-10">
-              <div className="text-center mb-8">
-                <img src="/apple-touch-icon.png" alt="T&C Ez Quote" className="w-28 h-28 rounded-2xl mx-auto mb-5 shadow-xl" />
-                <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">T&C Ez Quote</h1>
-                <p className="text-gray-500 text-base mt-2 font-medium">T&C Materials, LLC — Quote Management</p>
+          <div style={{minHeight:'100vh', background:'linear-gradient(135deg,#1e3a5f,#0f2440)', display:'flex', alignItems:'center', justifyContent:'center', padding:'24px'}}>
+            <div style={{background:'#fff', borderRadius:'24px', boxShadow:'0 25px 60px rgba(0,0,0,0.3)', padding:'40px 36px', width:'100%', maxWidth:'360px', textAlign:'center'}}>
+              <img src="/apple-touch-icon.png" alt="T&C Ez Quote" style={{width:'80px', height:'80px', borderRadius:'18px', margin:'0 auto 16px', display:'block', boxShadow:'0 4px 16px rgba(0,0,0,0.15)'}} />
+              <h1 style={{fontSize:'22px', fontWeight:'900', color:'#1e3a5f', margin:'0 0 4px'}}>T&amp;C Ez Quote</h1>
+              <p style={{fontSize:'13px', color:'#94a3b8', margin:'0 0 32px'}}>T&amp;C Materials, LLC</p>
+
+              {/* PIN dots */}
+              <div style={{display:'flex', justifyContent:'center', gap:'16px', marginBottom:'8px'}}>
+                {pinDots}
               </div>
-              <form onSubmit={handleLogin} className="space-y-5">
-                <div>
-                  <label className="field-label">Username</label>
-                  <input type="text" value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} placeholder="e.g. alex.saplala" className="field-input" autoComplete="username" autoCapitalize="none" />
-                </div>
-                <div>
-                  <label className="field-label">Password</label>
-                  <input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} placeholder="Enter your password" className="field-input" autoComplete="current-password" />
-                </div>
-                <button type="submit" className="w-full bg-tc-orange text-white py-4 rounded-xl font-bold text-lg hover:bg-orange-600 transition-colors mt-2" style={{minHeight:'56px'}}>Sign In</button>
-              </form>
-              <p className="mt-6 text-center text-sm text-gray-400">alex.saplala &nbsp;·&nbsp; corey.pelletier</p>
+
+              {/* Error or prompt */}
+              <div style={{height:'22px', marginBottom:'24px'}}>
+                {loginError
+                  ? <p style={{color:'#ef4444', fontSize:'13px', fontWeight:'600', margin:0}}>{loginError}</p>
+                  : <p style={{color:'#94a3b8', fontSize:'13px', margin:0}}>{loginLoading ? 'Verifying...' : 'Enter your PIN'}</p>}
+              </div>
+
+              {/* Keypad */}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(3,72px)', gap:'14px', justifyContent:'center'}}>
+                {['1','2','3','4','5','6','7','8','9'].map(d => (
+                  <PinKey key={d} label={d} onClick={() => handlePinDigit(d)} />
+                ))}
+                {/* Empty left, 0 center, backspace right */}
+                <div />
+                <PinKey label="0" onClick={() => handlePinDigit('0')} />
+                <PinKey label="⌫" onClick={handlePinBackspace} style={{fontSize:'20px', color:'#64748b'}} />
+              </div>
             </div>
           </div>
         );
