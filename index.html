@@ -936,13 +936,14 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             </div>
           </div>
 
-          <div style={{display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1.2fr 0.9fr', gap:'12px', alignItems:'start'}}>
-            {/* Description */}
-            <div>
-              <label className="field-label">Description / Line Item Name</label>
-              <input type="text" value={item.description} onChange={handleDescChange} className="field-input" placeholder="e.g. 1&quot; Clean Limestone" />
-            </div>
+          {/* Row 1: Description */}
+          <div style={{marginBottom:'12px'}}>
+            <label className="field-label">Description / Line Item Name</label>
+            <input type="text" value={item.description} onChange={handleDescChange} className="field-input" placeholder="e.g. 1&quot; Clean Limestone" />
+          </div>
 
+          {/* Row 2: Qty / Unit / Mat Cost / Markup */}
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1.8fr 1fr', gap:'12px', alignItems:'start'}}>
             {/* Quantity */}
             <div>
               <label className="field-label">Quantity</label>
@@ -960,9 +961,9 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
               </select>
             </div>
 
-            {/* Material Price per unit */}
+            {/* Material Cost per unit */}
             <div>
-              <label className="field-label">Mat. Cost / Unit ($)</label>
+              <label className="field-label">Material Cost / Unit ($)</label>
               <input type="number" value={base || ''} onChange={handlePriceChange} className="field-input" placeholder="0.00" step="0.01" />
             </div>
 
