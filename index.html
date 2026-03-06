@@ -875,6 +875,12 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
     const LineItemRow = ({ item, index, onUpdate, onRemove }) => {
       const [showCalc, setShowCalc] = useState(false);
 
+      // Central calc: priceEach = (materialBasePrice + haulPerUnit) * (1 + markupPct/100)
+      const calcPriceEach = (base, haul, markup) => {
+        const cost = (base || 0) + (haul || 0);
+        return cost * (1 + (markup || 0) / 100);
+      };
+
       const handleDescChange = (e) => {
         onUpdate(index, { ...item, description: e.target.value });
       };
@@ -889,25 +895,36 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       };
 
       const handlePriceChange = (e) => {
-        const price = parseFloat(e.target.value) || 0;
-        // Re-derive priceEach = materialBasePrice + haulPerUnit
-        const haul = item.haulPerUnit || 0;
-        onUpdate(index, { ...item, materialBasePrice: price, priceEach: price + haul, priceTotal: item.quantity * (price + haul) });
+        const base = parseFloat(e.target.value) || 0;
+        const newPriceEach = calcPriceEach(base, item.haulPerUnit, item.markupPct);
+        onUpdate(index, { ...item, materialBasePrice: base, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
+      };
+
+      const handleMarkupChange = (e) => {
+        const markup = parseFloat(e.target.value) || 0;
+        const base = item.materialBasePrice !== undefined ? item.materialBasePrice : 0;
+        const newPriceEach = calcPriceEach(base, item.haulPerUnit, markup);
+        onUpdate(index, { ...item, markupPct: markup, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
       };
 
       const handleHaulApply = ({ costPerUnit, unit: haulUnit }) => {
         const base = item.materialBasePrice !== undefined ? item.materialBasePrice : (item.priceEach || 0);
-        const newPrice = base + costPerUnit;
-        onUpdate(index, { ...item, materialBasePrice: base, haulPerUnit: costPerUnit, haulUnit, priceEach: newPrice, priceTotal: item.quantity * newPrice });
+        const newPriceEach = calcPriceEach(base, costPerUnit, item.markupPct);
+        onUpdate(index, { ...item, materialBasePrice: base, haulPerUnit: costPerUnit, haulUnit, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
         setShowCalc(false);
       };
 
       const handleHaulRemove = () => {
         const base = item.materialBasePrice !== undefined ? item.materialBasePrice : (item.priceEach || 0);
-        onUpdate(index, { ...item, haulPerUnit: 0, haulUnit: null, priceEach: base, priceTotal: item.quantity * base });
+        const newPriceEach = calcPriceEach(base, 0, item.markupPct);
+        onUpdate(index, { ...item, haulPerUnit: 0, haulUnit: null, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
       };
 
       const hasHaul = item.haulPerUnit && item.haulPerUnit > 0;
+      const base = item.materialBasePrice !== undefined ? item.materialBasePrice : 0;
+      const cost = base + (item.haulPerUnit || 0);
+      const markup = item.markupPct || 0;
+      const quotedPrice = item.priceEach || 0;
 
       return (
         <div className="line-item-card">
@@ -919,7 +936,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             </div>
           </div>
 
-          <div style={{display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1.5fr', gap:'12px', alignItems:'start'}}>
+          <div style={{display:'grid', gridTemplateColumns:'3fr 1fr 1fr 1.2fr 0.9fr', gap:'12px', alignItems:'start'}}>
             {/* Description */}
             <div>
               <label className="field-label">Description / Line Item Name</label>
@@ -945,25 +962,43 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
             {/* Material Price per unit */}
             <div>
-              <label className="field-label">Material Price / Unit ($)</label>
-              <input type="number" value={item.materialBasePrice !== undefined ? item.materialBasePrice : (item.priceEach || '')} onChange={handlePriceChange} className="field-input" placeholder="0.00" step="0.01" />
+              <label className="field-label">Mat. Cost / Unit ($)</label>
+              <input type="number" value={base || ''} onChange={handlePriceChange} className="field-input" placeholder="0.00" step="0.01" />
+            </div>
+
+            {/* Markup % */}
+            <div>
+              <label className="field-label">Markup (%)</label>
+              <input type="number" value={markup || ''} onChange={handleMarkupChange} className="field-input" placeholder="0" step="0.5" min="0" />
             </div>
           </div>
 
-          {/* Haul Rate row */}
-          <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
-            {hasHaul ? (
-              <>
-                <span style={{display:'inline-flex', alignItems:'center', gap:'6px', background:'#eff6ff', border:'1.5px solid #93c5fd', borderRadius:'8px', padding:'6px 12px', fontSize:'13px', fontWeight:700, color:'#1d4ed8'}}>
-                  🚚 Haul: +{formatCurrency(item.haulPerUnit)}/{item.haulUnit || item.unit} included
-                </span>
-                <button onClick={() => setShowCalc(true)} style={{padding:'6px 12px', border:'1px solid #d1d5db', borderRadius:'8px', fontSize:'12px', fontWeight:600, color:'#374151', background:'#fff', cursor:'pointer'}}>Edit</button>
-                <button onClick={handleHaulRemove} style={{padding:'6px 10px', border:'1px solid #fca5a5', borderRadius:'8px', fontSize:'12px', fontWeight:600, color:'#dc2626', background:'#fff', cursor:'pointer'}}>✕ Remove</button>
-              </>
-            ) : (
-              <button onClick={() => setShowCalc(true)} style={{display:'inline-flex', alignItems:'center', gap:'6px', padding:'7px 14px', border:'1.5px dashed #d1d5db', borderRadius:'8px', fontSize:'13px', fontWeight:600, color:'#6b7280', background:'transparent', cursor:'pointer'}}>
-                <Icons.Truck /> Add Haul Rate
-              </button>
+          {/* Haul + pricing summary row */}
+          <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', justifyContent:'space-between'}}>
+            {/* Haul Rate button / badge */}
+            <div style={{display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap'}}>
+              {hasHaul ? (
+                <>
+                  <span style={{display:'inline-flex', alignItems:'center', gap:'6px', background:'#eff6ff', border:'1.5px solid #93c5fd', borderRadius:'8px', padding:'6px 12px', fontSize:'13px', fontWeight:700, color:'#1d4ed8'}}>
+                    🚚 Haul: +{formatCurrency(item.haulPerUnit)}/{item.haulUnit || item.unit} included
+                  </span>
+                  <button onClick={() => setShowCalc(true)} style={{padding:'6px 12px', border:'1px solid #d1d5db', borderRadius:'8px', fontSize:'12px', fontWeight:600, color:'#374151', background:'#fff', cursor:'pointer'}}>Edit</button>
+                  <button onClick={handleHaulRemove} style={{padding:'6px 10px', border:'1px solid #fca5a5', borderRadius:'8px', fontSize:'12px', fontWeight:600, color:'#dc2626', background:'#fff', cursor:'pointer'}}>✕ Remove</button>
+                </>
+              ) : (
+                <button onClick={() => setShowCalc(true)} style={{display:'inline-flex', alignItems:'center', gap:'6px', padding:'8px 16px', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:700, color:'#fff', background:'#1e3a5f', cursor:'pointer'}}>
+                  <Icons.Truck /> Add Haul Rate
+                </button>
+              )}
+            </div>
+
+            {/* Quoted price summary (visible when cost > 0) */}
+            {cost > 0 && (
+              <div style={{display:'flex', gap:'16px', alignItems:'center', fontSize:'12px', color:'#6b7280', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 14px'}}>
+                <span>Cost: <strong style={{color:'#374151'}}>{formatCurrency(cost)}</strong></span>
+                {markup > 0 && <span>Markup: <strong style={{color:'#f97316'}}>{markup}%</strong></span>}
+                <span>Quoted: <strong style={{color:'#1e3a5f', fontSize:'13px'}}>{formatCurrency(quotedPrice)}</strong>/{item.unit}</span>
+              </div>
             )}
           </div>
 
@@ -1207,7 +1242,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         });
       };
 
-      const addLineItem = () => setFormData({ ...formData, lineItems: [...formData.lineItems, { itemNumber: formData.lineItems.length + 1, description: '', quantity: 0, unit: 'Tons', materialBasePrice: 0, haulPerUnit: 0, haulUnit: null, priceEach: 0, priceTotal: 0 }] });
+      const addLineItem = () => setFormData({ ...formData, lineItems: [...formData.lineItems, { itemNumber: formData.lineItems.length + 1, description: '', quantity: 0, unit: 'Tons', materialBasePrice: 0, haulPerUnit: 0, haulUnit: null, markupPct: 0, priceEach: 0, priceTotal: 0 }] });
       const updateLineItem = (idx, item) => { const items = [...formData.lineItems]; items[idx] = { ...item, itemNumber: idx + 1 }; setFormData({ ...formData, lineItems: items }); };
       const removeLineItem = (idx) => setFormData({ ...formData, lineItems: formData.lineItems.filter((_, i) => i !== idx).map((item, i) => ({ ...item, itemNumber: i + 1 })) });
       const subtotal = formData.lineItems.reduce((sum, item) => sum + (item.priceTotal || 0), 0);
