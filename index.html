@@ -154,61 +154,69 @@
     // ============================================
     // CONFIGURATION & API
     // ============================================
-    const API_BASE = '/.netlify/functions';
-    const USE_API = true; // Set to false for localStorage-only mode (demo)
+    const TGR_API = 'https://texasgotrocks.com/.netlify/functions';
     const STORAGE_KEY = 'tc_ez_quote_data_v3';
+    const MIGRATION_KEY = 'tcq_migrated_v1';
 
-    // API Helper
+    // Auth token — set on login, used for all data calls
+    let authToken = null;
+
+    // API Helper (all data calls go to TGR backend with JWT)
     const api = {
-      async get(endpoint) {
-        if (!USE_API) return null;
+      _headers(extra = {}) {
+        const h = { 'Content-Type': 'application/json', ...extra };
+        if (authToken) h['Authorization'] = `Bearer ${authToken}`;
+        return h;
+      },
+      async get(path) {
         try {
-          const res = await fetch(`${API_BASE}/${endpoint}`);
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          const res = await fetch(`${TGR_API}/${path}`, { headers: this._headers() });
+          if (!res.ok) throw new Error(`${res.status}`);
           return await res.json();
         } catch (e) {
-          console.error(`GET ${endpoint} failed:`, e);
+          console.error(`GET ${path} failed:`, e);
           return null;
         }
       },
-      async post(endpoint, data) {
-        if (!USE_API) return null;
+      async post(path, data) {
         try {
-          const res = await fetch(`${API_BASE}/${endpoint}`, {
+          const res = await fetch(`${TGR_API}/${path}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this._headers(),
             body: JSON.stringify(data)
           });
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          if (!res.ok) throw new Error(`${res.status}`);
           return await res.json();
         } catch (e) {
-          console.error(`POST ${endpoint} failed:`, e);
+          console.error(`POST ${path} failed:`, e);
           return null;
         }
       },
-      async put(endpoint, data) {
-        if (!USE_API) return null;
+      async put(path, data) {
         try {
-          const res = await fetch(`${API_BASE}/${endpoint}`, {
+          const res = await fetch(`${TGR_API}/${path}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: this._headers(),
             body: JSON.stringify(data)
           });
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          if (!res.ok) throw new Error(`${res.status}`);
           return await res.json();
         } catch (e) {
-          console.error(`PUT ${endpoint} failed:`, e);
+          console.error(`PUT ${path} failed:`, e);
           return null;
         }
       },
-      async delete(endpoint) {
-        if (!USE_API) return null;
+      async delete(path, data) {
         try {
-          const res = await fetch(`${API_BASE}/${endpoint}`, { method: 'DELETE' });
-          if (!res.ok) throw new Error(`API error: ${res.status}`);
+          const res = await fetch(`${TGR_API}/${path}`, {
+            method: 'DELETE',
+            headers: this._headers(),
+            body: JSON.stringify(data)
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
           return await res.json();
         } catch (e) {
-          console.error(`DELETE ${endpoint} failed:`, e);
+          console.error(`DELETE ${path} failed:`, e);
           return null;
         }
       }
@@ -1517,8 +1525,65 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const [pinEntry, setPinEntry] = useState('');
       const [loginError, setLoginError] = useState('');
       const [loginLoading, setLoginLoading] = useState(false);
+      const [syncStatus, setSyncStatus] = useState(''); // 'syncing' | 'synced' | 'offline' | ''
+      const [showMigrationPrompt, setShowMigrationPrompt] = useState(false);
+      const [pendingMigrationData, setPendingMigrationData] = useState(null);
 
       useEffect(() => { saveToStorage(data); }, [data]);
+
+      const loadCloudData = async (localData) => {
+        setSyncStatus('syncing');
+        try {
+          const [cloudQuotes, cloudCustomers] = await Promise.all([
+            api.get('tcq-data?type=quotes'),
+            api.get('tcq-data?type=customers')
+          ]);
+
+          if (cloudQuotes === null && cloudCustomers === null) {
+            setSyncStatus('offline');
+            return;
+          }
+
+          const quotes = cloudQuotes || [];
+          const customers = cloudCustomers || [];
+
+          // Check if we need to migrate existing localStorage data
+          const alreadyMigrated = localStorage.getItem(MIGRATION_KEY);
+          const hasLocalQuotes = localData.quotes && localData.quotes.length > 0;
+          const hasLocalCustomers = localData.customers && localData.customers.filter(c => !['1','2'].includes(c._id)).length > 0;
+
+          if (!alreadyMigrated && (hasLocalQuotes || hasLocalCustomers) && quotes.length === 0) {
+            // Office computer with existing data that hasn't been synced yet
+            setPendingMigrationData({ quotes: localData.quotes || [], customers: localData.customers || [] });
+            setShowMigrationPrompt(true);
+          }
+
+          setData(prev => ({ ...prev, quotes, customers }));
+          setSyncStatus('synced');
+        } catch (e) {
+          console.error('Cloud load failed:', e);
+          setSyncStatus('offline');
+        }
+      };
+
+      const runMigration = async () => {
+        if (!pendingMigrationData) return;
+        setSyncStatus('syncing');
+        setShowMigrationPrompt(false);
+        const result = await api.post('tcq-data', {
+          action: 'import',
+          quotes: pendingMigrationData.quotes,
+          customers: pendingMigrationData.customers
+        });
+        if (result && result.success) {
+          localStorage.setItem(MIGRATION_KEY, '1');
+          alert(`Data imported! ${result.quotesInserted} quotes and ${result.customersInserted} customers are now synced across all devices.`);
+          await loadCloudData({ quotes: [], customers: [] });
+        } else {
+          setSyncStatus('offline');
+          alert('Import failed — your local data is still intact. Try again when you have a connection.');
+        }
+      };
 
       const handlePinKey = (digit) => {
         if (loginLoading) return;
@@ -1538,15 +1603,19 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         setLoginLoading(true);
         setLoginError('');
         try {
-          const res = await fetch('https://texasgotrocks.com/.netlify/functions/tcq-auth', {
+          const res = await fetch(`${TGR_API}/tcq-auth`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pin })
           });
           const d = await res.json();
           if (d.success) {
+            authToken = d.token;
             setUser(d.user);
             setPinEntry('');
+            // Load cloud data after login (pass current localStorage state for migration check)
+            const localSnapshot = loadFromStorage() || { quotes: [], customers: [] };
+            loadCloudData(localSnapshot);
           } else {
             setLoginError(d.error || 'Incorrect PIN');
             setPinEntry('');
@@ -1567,8 +1636,15 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         if (next.length === 4) handlePinSubmit(next);
       };
       
-      const addCustomer = (c) => setData({ ...data, customers: [...data.customers, c] });
-      const updateCustomer = (c) => setData({ ...data, customers: data.customers.map(x => x._id === c._id ? c : x) });
+      const addCustomer = async (c) => {
+        const cloudRes = await api.post('tcq-data', { type: 'customers', data: c });
+        const saved = { ...c, _id: cloudRes?._id || Date.now().toString() };
+        setData(prev => ({ ...prev, customers: [...prev.customers, saved] }));
+      };
+      const updateCustomer = async (c) => {
+        await api.put('tcq-data', { type: 'customers', id: c._id, data: c });
+        setData(prev => ({ ...prev, customers: prev.customers.map(x => x._id === c._id ? c : x) }));
+      };
       const updateSource = (s) => setData({ ...data, sourceLocations: data.sourceLocations.map(x => x._id === s._id ? s : x) });
       const addSource = (s) => setData({ ...data, sourceLocations: [...data.sourceLocations, s] });
       const updateMaterial = (m) => setData({ ...data, materials: data.materials.map(x => x._id === m._id ? m : x) });
@@ -1577,35 +1653,45 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const saveQuote = async (q, send) => {
         const isNew = !editQuote?._id;
         let finalQuote = { ...q };
+
         if (isNew) {
+          // Get quote number from server log
           try {
-            const response = await fetch('https://texasgotrocks.com/.netlify/functions/tcq-log-quote', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                salesRepSnapshot: q.salesRepSnapshot,
-                customerSnapshot: q.customerSnapshot,
-                projectName: q.projectName,
-                lineItems: q.lineItems,
-                deliveryMethod: q.deliveryMethod,
-                paymentTerms: q.paymentTerms,
-                quoteData: q
-              })
+            const logRes = await api.post('tcq-log-quote', {
+              salesRepSnapshot: q.salesRepSnapshot,
+              customerSnapshot: q.customerSnapshot,
+              projectName: q.projectName,
+              lineItems: q.lineItems,
+              deliveryMethod: q.deliveryMethod,
+              paymentTerms: q.paymentTerms,
+              quoteData: q
             });
-            const res = await response.json();
-            if (res && res.quoteNumber) {
-              finalQuote = { ...finalQuote, quoteNumber: res.quoteNumber };
+            if (logRes && logRes.quoteNumber) {
+              finalQuote = { ...finalQuote, quoteNumber: logRes.quoteNumber };
             }
           } catch (e) {
-            console.error('Failed to log quote to server:', e);
+            console.error('Failed to log quote:', e);
           }
-        }
-        const savedQuote = { ...finalQuote, _id: Date.now().toString(), createdAt: new Date().toISOString() };
-        if (isNew) {
-          setData({ ...data, quotes: [savedQuote, ...data.quotes] });
+
+          // Save to MongoDB (source of truth)
+          const cloudRes = await api.post('tcq-data', { type: 'quotes', data: finalQuote });
+          const savedQuote = {
+            ...finalQuote,
+            _id: cloudRes?._id || Date.now().toString(),
+            createdAt: new Date().toISOString()
+          };
+          setData(prev => ({ ...prev, quotes: [savedQuote, ...prev.quotes] }));
         } else {
-          setData({ ...data, quotes: data.quotes.map(x => x._id === editQuote._id ? { ...x, ...finalQuote, updatedAt: new Date().toISOString() } : x) });
+          // Update in MongoDB
+          await api.put('tcq-data', { type: 'quotes', id: editQuote._id, data: finalQuote });
+          setData(prev => ({
+            ...prev,
+            quotes: prev.quotes.map(x => x._id === editQuote._id
+              ? { ...x, ...finalQuote, updatedAt: new Date().toISOString() }
+              : x)
+          }));
         }
+
         setShowForm(false); setEditQuote(null);
 
         if (send) {
@@ -1700,6 +1786,29 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
       return (
         <div className="min-h-screen bg-gray-100 flex">
+          {/* Migration prompt modal */}
+          {showMigrationPrompt && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:'24px'}}>
+              <div style={{background:'#fff',borderRadius:'16px',padding:'32px',maxWidth:'400px',width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+                <div style={{fontSize:'32px',marginBottom:'12px'}}>☁️</div>
+                <h2 style={{fontSize:'18px',fontWeight:'800',color:'#1e3a5f',marginBottom:'8px'}}>Sync your existing data</h2>
+                <p style={{fontSize:'14px',color:'#64748b',marginBottom:'8px'}}>
+                  You have <strong>{pendingMigrationData?.quotes?.length || 0} quotes</strong> and <strong>{pendingMigrationData?.customers?.length || 0} customers</strong> saved locally on this device.
+                </p>
+                <p style={{fontSize:'14px',color:'#64748b',marginBottom:'24px'}}>
+                  Upload them to the cloud now so they're available on every device — nothing will be lost.
+                </p>
+                <div style={{display:'flex',gap:'12px'}}>
+                  <button onClick={runMigration} style={{flex:1,background:'#f97316',color:'#fff',border:'none',borderRadius:'10px',padding:'12px',fontWeight:'700',fontSize:'15px',cursor:'pointer'}}>
+                    Upload to Cloud
+                  </button>
+                  <button onClick={() => { setShowMigrationPrompt(false); localStorage.setItem(MIGRATION_KEY, '1'); }} style={{flex:1,background:'#f1f5f9',color:'#64748b',border:'none',borderRadius:'10px',padding:'12px',fontWeight:'600',fontSize:'14px',cursor:'pointer'}}>
+                    Skip
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <aside className={`${sidebar ? 'w-56' : 'w-14 mobile-hidden'} bg-tc-blue text-white transition-all flex flex-col`}>
             <div className="p-3 border-b border-blue-800 flex items-center gap-2">
               <div className="w-8 h-8 bg-tc-orange rounded flex items-center justify-center flex-shrink-0"><Icons.Building /></div>
@@ -1712,8 +1821,15 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
               <button onClick={() => setPage('sources')} className={`w-full flex items-center gap-2 px-3 py-2 rounded text-sm ${page === 'sources' ? 'bg-blue-800' : 'hover:bg-blue-800'}`}><Icons.MapPin />{sidebar && 'Sources'}</button>
             </nav>
             <div className="p-2 border-t border-blue-800">
-              {sidebar && <p className="text-xs mb-2 px-2">{user.name}</p>}
-              <button onClick={() => setUser(null)} className="w-full flex items-center gap-2 px-3 py-2 rounded text-sm hover:bg-blue-800"><Icons.LogOut />{sidebar && 'Logout'}</button>
+              {sidebar && (
+                <div className="px-2 mb-2">
+                  <p className="text-xs text-white">{user.name}</p>
+                  {syncStatus === 'syncing' && <p className="text-xs text-blue-300">⏳ Syncing...</p>}
+                  {syncStatus === 'synced' && <p className="text-xs text-green-400">✓ Synced</p>}
+                  {syncStatus === 'offline' && <p className="text-xs text-yellow-400">⚠ Offline</p>}
+                </div>
+              )}
+              <button onClick={() => { setUser(null); authToken = null; }} className="w-full flex items-center gap-2 px-3 py-2 rounded text-sm hover:bg-blue-800"><Icons.LogOut />{sidebar && 'Logout'}</button>
             </div>
           </aside>
 
