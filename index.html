@@ -1820,9 +1820,10 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         let finalQuote = { ...q };
 
         if (isNew) {
-          // Get quote number from server log
+          // Get quote number + write to quote_log (what Command Center reads)
+          let logRes = null;
           try {
-            const logRes = await api.post('tcq-log-quote', {
+            logRes = await api.post('tcq-log-quote', {
               salesRepSnapshot: q.salesRepSnapshot,
               customerSnapshot: q.customerSnapshot,
               projectName: q.projectName,
@@ -1837,16 +1838,16 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
           } catch (e) {
             console.error('Failed to log quote:', e);
           }
-
-          // Save to MongoDB (source of truth)
-          const cloudRes = await api.post('tcq-data', { type: 'quotes', data: finalQuote });
-          if (!cloudRes || !cloudRes._id) {
+          if (!logRes || !logRes.quoteNumber) {
             alert(
               '⚠️ Quote saved locally but could NOT sync to the cloud.\n\n' +
               'The Command Center will not show this quote.\n\n' +
               'Check your connection and try saving again, or contact Alex.'
             );
           }
+
+          // Save full quote to tcq_quotes (source of truth for this app)
+          const cloudRes = await api.post('tcq-data', { type: 'quotes', data: finalQuote });
           const savedQuote = {
             ...finalQuote,
             _id: cloudRes?._id || Date.now().toString(),
