@@ -178,19 +178,24 @@
           return null;
         }
       },
-      async post(path, data) {
-        try {
-          const res = await fetch(`${TGR_API}/${path}`, {
-            method: 'POST',
-            headers: this._headers(),
-            body: JSON.stringify(data)
-          });
-          if (!res.ok) throw new Error(`${res.status}`);
-          return await res.json();
-        } catch (e) {
-          console.error(`POST ${path} failed:`, e);
-          return null;
+      async post(path, data, retries = 1) {
+        for (let attempt = 0; attempt <= retries; attempt++) {
+          try {
+            const res = await fetch(`${TGR_API}/${path}`, {
+              method: 'POST',
+              headers: this._headers(),
+              body: JSON.stringify(data)
+            });
+            if (!res.ok) throw new Error(`${res.status}`);
+            return await res.json();
+          } catch (e) {
+            console.error(`POST ${path} attempt ${attempt + 1} failed:`, e);
+            if (attempt < retries) {
+              await new Promise(r => setTimeout(r, 1500));
+            }
+          }
         }
+        return null;
       },
       async put(path, data) {
         try {
@@ -1835,6 +1840,13 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
           // Save to MongoDB (source of truth)
           const cloudRes = await api.post('tcq-data', { type: 'quotes', data: finalQuote });
+          if (!cloudRes || !cloudRes._id) {
+            alert(
+              '⚠️ Quote saved locally but could NOT sync to the cloud.\n\n' +
+              'The Command Center will not show this quote.\n\n' +
+              'Check your connection and try saving again, or contact Alex.'
+            );
+          }
           const savedQuote = {
             ...finalQuote,
             _id: cloudRes?._id || Date.now().toString(),
