@@ -502,9 +502,9 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
                     style={{
                       display:'inline-flex', alignItems:'center', gap:'5px',
                       padding:'4px 10px', fontSize:'11px', fontWeight:700,
-                      background: showMapPanel ? '#1e3a5f' : '#fff',
-                      color: showMapPanel ? '#fff' : '#1e3a5f',
-                      border:'1.5px solid #1e3a5f', borderRadius:'6px', cursor:'pointer',
+                      background: showMapPanel ? '#16a34a' : '#fff',
+                      color: showMapPanel ? '#fff' : '#16a34a',
+                      border:'1.5px solid #16a34a', borderRadius:'6px', cursor:'pointer',
                       letterSpacing:'0.02em', whiteSpace:'nowrap'
                     }}>
                     <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -569,19 +569,28 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
                     )}
 
                     {mapResult && (
-                      <div style={{margin:'0 0 10px', background:'#dcfce7', border:'1.5px solid #86efac', borderRadius:'8px', padding:'10px 12px'}}>
-                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px'}}>
-                          <span style={{fontSize:'13px', fontWeight:800, color:'#15803d'}}>🕐 {mapResult.durationMinutes} min one way</span>
-                          <span style={{fontSize:'12px', color:'#166534', fontWeight:600}}>{mapResult.distanceMiles} mi</span>
+                      <div style={{margin:'0 0 10px', background:'#dcfce7', border:'1.5px solid #86efac', borderRadius:'10px', overflow:'hidden'}}>
+                        {mapResult.mapImageDataUrl && (
+                          <img
+                            src={mapResult.mapImageDataUrl}
+                            alt="Route map"
+                            style={{width:'100%', display:'block', maxHeight:'180px', objectFit:'cover'}}
+                          />
+                        )}
+                        <div style={{padding:'10px 12px'}}>
+                          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px'}}>
+                            <span style={{fontSize:'13px', fontWeight:800, color:'#15803d'}}>🕐 {mapResult.durationMinutes} min one way</span>
+                            <span style={{fontSize:'12px', color:'#166534', fontWeight:600}}>{mapResult.distanceMiles} mi</span>
+                          </div>
+                          <p style={{margin:'0', fontSize:'11px', color:'#4b7280'}}>
+                            via {mapResult.summary} · {mapResult.durationText}{avoidTolls && ' · Toll-free route'}
+                          </p>
+                          <button
+                            onClick={applyMapTime}
+                            style={{marginTop:'8px', width:'100%', padding:'8px', background:'#16a34a', color:'#fff', border:'none', borderRadius:'6px', fontWeight:800, fontSize:'13px', cursor:'pointer'}}>
+                            ✓ Use {mapResult.durationMinutes} min
+                          </button>
                         </div>
-                        <p style={{margin:'0', fontSize:'11px', color:'#4b7280'}}>
-                          via {mapResult.summary} · {mapResult.durationText}{avoidTolls && ' · Toll-free route'}
-                        </p>
-                        <button
-                          onClick={applyMapTime}
-                          style={{marginTop:'8px', width:'100%', padding:'8px', background:'#16a34a', color:'#fff', border:'none', borderRadius:'6px', fontWeight:800, fontSize:'13px', cursor:'pointer'}}>
-                          ✓ Use {mapResult.durationMinutes} min
-                        </button>
                       </div>
                     )}
 

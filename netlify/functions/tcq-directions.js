@@ -45,6 +45,20 @@ exports.handler = async (event) => {
     const leg = data.routes[0].legs[0];
     const durationMinutes = Math.ceil(leg.duration.value / 60);
     const distanceMiles = (leg.distance.value * 0.000621371).toFixed(1);
+    const polyline = data.routes[0].overview_polyline.points;
+
+    // Fetch static map image and return as base64 so the API key never hits the browser
+    let mapImageDataUrl = null;
+    try {
+      const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?size=600x300&scale=2&path=color:0x1e3a5fff|weight:5|enc:${encodeURIComponent(polyline)}&markers=color:green|label:A|${encodeURIComponent(origin)}&markers=color:red|label:B|${encodeURIComponent(destination)}&key=${apiKey}`;
+      const mapRes = await fetch(mapUrl);
+      if (mapRes.ok) {
+        const buffer = await mapRes.arrayBuffer();
+        mapImageDataUrl = `data:image/png;base64,${Buffer.from(buffer).toString('base64')}`;
+      }
+    } catch (e) {
+      console.warn('tcq-directions: static map fetch failed:', e.message);
+    }
 
     return {
       statusCode: 200,
@@ -55,7 +69,8 @@ exports.handler = async (event) => {
         distanceMiles,
         summary: data.routes[0].summary,
         durationText: leg.duration.text,
-        distanceText: leg.distance.text
+        distanceText: leg.distance.text,
+        mapImageDataUrl
       })
     };
 
