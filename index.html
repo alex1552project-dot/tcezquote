@@ -336,6 +336,15 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const [description, setDescription] = useState('Trucking / Hauling');
       const [outputUnit, setOutputUnit] = useState('Tons');
 
+      // ── Map Out Haul state ──
+      const [showMapPanel, setShowMapPanel] = useState(false);
+      const [mapOrigin, setMapOrigin] = useState('');
+      const [mapDest, setMapDest] = useState('');
+      const [avoidTolls, setAvoidTolls] = useState(false);
+      const [mapLoading, setMapLoading] = useState(false);
+      const [mapError, setMapError] = useState('');
+      const [mapResult, setMapResult] = useState(null);
+
       // Truck type presets - TONS only (legal weight limits)
       const truckPresets = [
         { name: 'End Dump (Truck & Trailer)', tons: '21' },
@@ -353,6 +362,40 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         { name: 'Topsoil', density: '1.1' },
         { name: 'Clay/Fill Dirt', density: '1.25' },
       ];
+
+      const fetchDriveTime = async () => {
+        if (!mapOrigin.trim() || !mapDest.trim()) {
+          setMapError('Please enter both an origin and a destination.');
+          return;
+        }
+        setMapLoading(true);
+        setMapError('');
+        setMapResult(null);
+        try {
+          const res = await fetch('/.netlify/functions/tcq-directions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ origin: mapOrigin, destination: mapDest, avoidTolls })
+          });
+          const data = await res.json();
+          if (data.success) {
+            setMapResult(data);
+          } else {
+            setMapError(data.error || 'Could not get directions. Check addresses and try again.');
+          }
+        } catch (e) {
+          setMapError('Connection error. Check your internet and try again.');
+        } finally {
+          setMapLoading(false);
+        }
+      };
+
+      const applyMapTime = () => {
+        if (!mapResult) return;
+        setTravelTime(String(mapResult.durationMinutes));
+        setShowMapPanel(false);
+        setMapResult(null);
+      };
 
       const calculate = () => {
         const rate = parseFloat(hourlyRate) || 0;
@@ -450,7 +493,114 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
                 </div>
               </div>
               
-              <div><label className="block text-xs font-semibold text-gray-700 mb-1">Travel Time One Way (min)</label><input type="number" value={travelTime} onChange={(e) => setTravelTime(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
+              {/* Travel Time + Map Out Haul */}
+              <div>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px'}}>
+                  <label className="block text-xs font-semibold text-gray-700">Travel Time One Way (min)</label>
+                  <button
+                    onClick={() => { setShowMapPanel(!showMapPanel); setMapError(''); setMapResult(null); }}
+                    style={{
+                      display:'inline-flex', alignItems:'center', gap:'5px',
+                      padding:'4px 10px', fontSize:'11px', fontWeight:700,
+                      background: showMapPanel ? '#1e3a5f' : '#fff',
+                      color: showMapPanel ? '#fff' : '#1e3a5f',
+                      border:'1.5px solid #1e3a5f', borderRadius:'6px', cursor:'pointer',
+                      letterSpacing:'0.02em', whiteSpace:'nowrap'
+                    }}>
+                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Map Out Haul
+                  </button>
+                </div>
+
+                <input
+                  type="number"
+                  value={travelTime}
+                  onChange={(e) => setTravelTime(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900"
+                />
+
+                {/* Map Out Haul Panel */}
+                {showMapPanel && (
+                  <div style={{marginTop:'10px', padding:'14px', background:'#f0f7ff', border:'1.5px solid #93c5fd', borderRadius:'10px'}}>
+                    <p style={{margin:'0 0 10px', fontSize:'12px', fontWeight:800, color:'#1e3a5f', letterSpacing:'0.04em', textTransform:'uppercase'}}>
+                      🗺 Map Out Haul Route
+                    </p>
+
+                    <div style={{marginBottom:'8px'}}>
+                      <label style={{display:'block', fontSize:'11px', fontWeight:700, color:'#374151', marginBottom:'3px'}}>Origin (Quarry / Pit)</label>
+                      <input
+                        type="text"
+                        value={mapOrigin}
+                        onChange={(e) => setMapOrigin(e.target.value)}
+                        placeholder="e.g. Willis Quarry, Willis TX"
+                        style={{width:'100%', border:'1.5px solid #d1d5db', borderRadius:'6px', padding:'7px 10px', fontSize:'13px', color:'#111827', background:'#fff', boxSizing:'border-box'}}
+                      />
+                    </div>
+
+                    <div style={{marginBottom:'8px'}}>
+                      <label style={{display:'block', fontSize:'11px', fontWeight:700, color:'#374151', marginBottom:'3px'}}>Destination (Job Site)</label>
+                      <input
+                        type="text"
+                        value={mapDest}
+                        onChange={(e) => setMapDest(e.target.value)}
+                        placeholder="e.g. 123 Main St, Conroe TX"
+                        style={{width:'100%', border:'1.5px solid #d1d5db', borderRadius:'6px', padding:'7px 10px', fontSize:'13px', color:'#111827', background:'#fff', boxSizing:'border-box'}}
+                      />
+                    </div>
+
+                    <label style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px', cursor:'pointer', fontSize:'12px', fontWeight:600, color:'#374151'}}>
+                      <input
+                        type="checkbox"
+                        checked={avoidTolls}
+                        onChange={(e) => setAvoidTolls(e.target.checked)}
+                        style={{width:'16px', height:'16px', accentColor:'#1e3a5f', cursor:'pointer'}}
+                      />
+                      Avoid Toll Roads
+                      <span style={{fontSize:'10px', color:'#6b7280', fontWeight:400}}>(610, Beltway, Hardy, etc.)</span>
+                    </label>
+
+                    {mapError && (
+                      <p style={{margin:'0 0 8px', fontSize:'12px', color:'#dc2626', fontWeight:600, background:'#fef2f2', padding:'6px 10px', borderRadius:'6px', border:'1px solid #fca5a5'}}>
+                        ⚠ {mapError}
+                      </p>
+                    )}
+
+                    {mapResult && (
+                      <div style={{margin:'0 0 10px', background:'#dcfce7', border:'1.5px solid #86efac', borderRadius:'8px', padding:'10px 12px'}}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px'}}>
+                          <span style={{fontSize:'13px', fontWeight:800, color:'#15803d'}}>🕐 {mapResult.durationMinutes} min one way</span>
+                          <span style={{fontSize:'12px', color:'#166534', fontWeight:600}}>{mapResult.distanceMiles} mi</span>
+                        </div>
+                        <p style={{margin:'0', fontSize:'11px', color:'#4b7280'}}>
+                          via {mapResult.summary} · {mapResult.durationText}{avoidTolls && ' · Toll-free route'}
+                        </p>
+                        <button
+                          onClick={applyMapTime}
+                          style={{marginTop:'8px', width:'100%', padding:'8px', background:'#16a34a', color:'#fff', border:'none', borderRadius:'6px', fontWeight:800, fontSize:'13px', cursor:'pointer'}}>
+                          ✓ Use {mapResult.durationMinutes} min
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={fetchDriveTime}
+                      disabled={mapLoading}
+                      style={{
+                        width:'100%', padding:'9px', fontSize:'13px', fontWeight:800,
+                        background: mapLoading ? '#94a3b8' : '#1e3a5f',
+                        color:'#fff', border:'none', borderRadius:'7px',
+                        cursor: mapLoading ? 'not-allowed' : 'pointer',
+                        display:'flex', alignItems:'center', justifyContent:'center', gap:'6px'
+                      }}>
+                      {mapLoading ? 'Getting Route...' : 'Get Drive Time'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {/* End Map Out Haul */}
               
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-xs font-semibold text-gray-700 mb-1">Loading (min)</label><input type="number" value={loadingTime} onChange={(e) => setLoadingTime(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-900" /></div>
@@ -487,6 +637,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
               <button onClick={handleApply} className="flex-1 px-4 py-2.5 bg-tc-orange text-white rounded-lg font-medium hover:bg-orange-600">Add ${selectedCost}/{outputUnit}</button>
             </div>
           </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       );
     };
@@ -1704,7 +1855,13 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             const emailRes = await fetch('https://texasgotrocks.com/.netlify/functions/tcq-send-quote', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ quote: finalQuote })
+              body: JSON.stringify({
+                quote: finalQuote,
+                cc: [
+                  { email: finalQuote.salesRepSnapshot?.email, name: finalQuote.salesRepSnapshot?.name },
+                  { email: 'corey@tcmaterialsllc.com', name: 'Corey L. Pelletier' }
+                ].filter(r => r.email)
+              })
             });
             const emailData = await emailRes.json();
             if (emailData.success) {
