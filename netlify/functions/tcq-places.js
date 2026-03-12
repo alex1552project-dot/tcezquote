@@ -22,7 +22,6 @@ exports.handler = async (event) => {
 
     const params = new URLSearchParams({
       input: input.trim(),
-      types: 'geocode',
       components: 'country:us',
       key: apiKey,
       ...(sessionToken ? { sessiontoken: sessionToken } : {})
