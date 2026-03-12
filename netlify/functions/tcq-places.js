@@ -16,7 +16,7 @@ exports.handler = async (event) => {
 
   try {
     const { input, sessionToken } = JSON.parse(event.body || '{}');
-    if (!input || input.trim().length < 2) {
+    if (!input || input.trim().length < 3) {
       return { statusCode: 200, headers, body: JSON.stringify({ predictions: [] }) };
     }
 

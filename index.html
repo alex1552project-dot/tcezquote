@@ -332,26 +332,36 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
     const AddressAutocomplete = ({ value, onChange, placeholder, inputStyle }) => {
       const [suggestions, setSuggestions] = useState([]);
       const [open, setOpen] = useState(false);
+      const [fetchError, setFetchError] = useState('');
       const debounceRef = useRef(null);
+      const abortRef = useRef(null);
       const sessionRef = useRef(Math.random().toString(36).slice(2));
 
       const handleChange = (e) => {
         const val = e.target.value;
         onChange(val);
+        setFetchError('');
+        // Cancel any pending debounce and any in-flight request
         if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (abortRef.current) abortRef.current.abort();
         if (val.trim().length < 3) { setSuggestions([]); return; }
         debounceRef.current = setTimeout(async () => {
+          const controller = new AbortController();
+          abortRef.current = controller;
           try {
             const res = await fetch('/.netlify/functions/tcq-places', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ input: val, sessionToken: sessionRef.current })
+              body: JSON.stringify({ input: val, sessionToken: sessionRef.current }),
+              signal: controller.signal
             });
             const data = await res.json();
             setSuggestions(data.predictions || []);
             setOpen(true);
-          } catch {}
-        }, 300);
+          } catch (err) {
+            if (err.name !== 'AbortError') setFetchError('Could not load suggestions');
+          }
+        }, 500);
       };
 
       const handleSelect = (desc) => {
@@ -372,6 +382,9 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             placeholder={placeholder}
             style={inputStyle}
           />
+          {fetchError && (
+            <p style={{ margin: '3px 0 0', fontSize: '11px', color: '#dc2626' }}>{fetchError}</p>
+          )}
           {open && suggestions.length > 0 && (
             <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1.5px solid #93c5fd', borderRadius: '8px', boxShadow: '0 6px 18px rgba(0,0,0,0.13)', zIndex: 200, overflow: 'hidden', marginTop: '2px' }}>
               {suggestions.map((s, i) => (
