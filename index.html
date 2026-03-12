@@ -149,7 +149,7 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     // ============================================
     // CONFIGURATION & API
@@ -324,6 +324,83 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       Printer: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>,
       Truck: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg>,
       Save: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+    };
+
+    // ============================================
+    // ADDRESS AUTOCOMPLETE
+    // ============================================
+    const AddressAutocomplete = ({ value, onChange, placeholder, inputStyle }) => {
+      const [suggestions, setSuggestions] = useState([]);
+      const [open, setOpen] = useState(false);
+      const debounceRef = useRef(null);
+      const sessionRef = useRef(Math.random().toString(36).slice(2));
+
+      const handleChange = (e) => {
+        const val = e.target.value;
+        onChange(val);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (val.trim().length < 3) { setSuggestions([]); return; }
+        debounceRef.current = setTimeout(async () => {
+          try {
+            const res = await fetch('/.netlify/functions/tcq-places', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ input: val, sessionToken: sessionRef.current })
+            });
+            const data = await res.json();
+            setSuggestions(data.predictions || []);
+            setOpen(true);
+          } catch {}
+        }, 300);
+      };
+
+      const handleSelect = (desc) => {
+        onChange(desc);
+        setSuggestions([]);
+        setOpen(false);
+        sessionRef.current = Math.random().toString(36).slice(2);
+      };
+
+      return (
+        <div style={{ position: 'relative' }}>
+          <input
+            type="text"
+            value={value}
+            onChange={handleChange}
+            onFocus={() => suggestions.length > 0 && setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder={placeholder}
+            style={inputStyle}
+          />
+          {open && suggestions.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1.5px solid #93c5fd', borderRadius: '8px', boxShadow: '0 6px 18px rgba(0,0,0,0.13)', zIndex: 200, overflow: 'hidden', marginTop: '2px' }}>
+              {suggestions.map((s, i) => (
+                <div
+                  key={s.place_id}
+                  onMouseDown={() => handleSelect(s.description)}
+                  style={{
+                    padding: '10px 13px',
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    color: '#111827',
+                    borderBottom: i < suggestions.length - 1 ? '1px solid #f3f4f6' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  {s.description}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
     };
 
     // ============================================
@@ -536,23 +613,21 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
 
                     <div style={{marginBottom:'8px'}}>
                       <label style={{display:'block', fontSize:'11px', fontWeight:700, color:'#374151', marginBottom:'3px'}}>Origin (Quarry / Pit)</label>
-                      <input
-                        type="text"
+                      <AddressAutocomplete
                         value={mapOrigin}
-                        onChange={(e) => setMapOrigin(e.target.value)}
+                        onChange={setMapOrigin}
                         placeholder="e.g. Willis Quarry, Willis TX"
-                        style={{width:'100%', border:'1.5px solid #d1d5db', borderRadius:'6px', padding:'7px 10px', fontSize:'13px', color:'#111827', background:'#fff', boxSizing:'border-box'}}
+                        inputStyle={{width:'100%', border:'1.5px solid #d1d5db', borderRadius:'6px', padding:'7px 10px', fontSize:'13px', color:'#111827', background:'#fff', boxSizing:'border-box'}}
                       />
                     </div>
 
                     <div style={{marginBottom:'8px'}}>
                       <label style={{display:'block', fontSize:'11px', fontWeight:700, color:'#374151', marginBottom:'3px'}}>Destination (Job Site)</label>
-                      <input
-                        type="text"
+                      <AddressAutocomplete
                         value={mapDest}
-                        onChange={(e) => setMapDest(e.target.value)}
+                        onChange={setMapDest}
                         placeholder="e.g. 123 Main St, Conroe TX"
-                        style={{width:'100%', border:'1.5px solid #d1d5db', borderRadius:'6px', padding:'7px 10px', fontSize:'13px', color:'#111827', background:'#fff', boxSizing:'border-box'}}
+                        inputStyle={{width:'100%', border:'1.5px solid #d1d5db', borderRadius:'6px', padding:'7px 10px', fontSize:'13px', color:'#111827', background:'#fff', boxSizing:'border-box'}}
                       />
                     </div>
 
