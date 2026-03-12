@@ -1488,7 +1488,11 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         paymentTerms: quote?.paymentTerms || 'Net 30',
         lineItems: quote?.lineItems || [],
         scopeOfWork: quote?.scopeOfWork || '',
-        salesRepSnapshot: quote?.salesRepSnapshot || { name: currentUser.name, phone: currentUser.phone, email: currentUser.email }
+        salesRepSnapshot: {
+          name: quote?.salesRepSnapshot?.name || currentUser.name,
+          phone: quote?.salesRepSnapshot?.phone || currentUser.phone,
+          email: quote?.salesRepSnapshot?.email || currentUser.email || ''
+        }
       });
 
       const [selectedCustomer, setSelectedCustomer] = useState(quote?.customerId ? customers.find(c => c._id === quote.customerId) : null);
