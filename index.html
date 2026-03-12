@@ -336,7 +336,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const [travelTime, setTravelTime] = useState(iv.travelTime ?? '30');
       const [loadingTime, setLoadingTime] = useState(iv.loadingTime ?? '5');
       const [unloadingTime, setUnloadingTime] = useState(iv.unloadingTime ?? '5');
-      const [truckCapacityTons, setTruckCapacityTons] = useState(iv.truckCapacityTons ?? '21');
+      const [truckCapacityTons, setTruckCapacityTons] = useState(iv.truckCapacityTons ?? '24');
       const [materialDensity, setMaterialDensity] = useState(iv.materialDensity ?? '1.4');
       const [roundTrips, setRoundTrips] = useState(iv.roundTrips ?? '3');
       const [description, setDescription] = useState(iv.description ?? 'Trucking / Hauling');
@@ -351,12 +351,10 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const [mapError, setMapError] = useState('');
       const [mapResult, setMapResult] = useState(null);
 
-      // Truck type presets - TONS only (legal weight limits)
+      // Truck type presets
       const truckPresets = [
-        { name: 'End Dump (Truck & Trailer)', tons: '21' },
-        { name: 'Tandem', tons: '15' },
-        { name: 'Super Dump', tons: '26' },
-        { name: 'Belly Dump', tons: '24' },
+        { name: 'Tandem',   tons: '15', rate: '100' },
+        { name: 'End Dump', tons: '24', rate: '125' },
       ];
 
       // Material density presets (tons per CY)
@@ -471,9 +469,9 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
                 <label className="block text-xs font-semibold text-gray-700 mb-2">Truck Type (Legal Weight Limit)</label>
                 <div className="grid grid-cols-2 gap-2">
                   {truckPresets.map(preset => (
-                    <button key={preset.name} onClick={() => setTruckCapacityTons(preset.tons)} className={`p-2 text-xs border rounded text-left hover:bg-orange-50 ${truckCapacityTons === preset.tons ? 'border-tc-orange bg-orange-50' : 'border-gray-300'}`}>
+                    <button key={preset.name} onClick={() => { setTruckCapacityTons(preset.tons); setHourlyRate(preset.rate); }} className={`p-2 text-xs border rounded text-left hover:bg-orange-50 ${truckCapacityTons === preset.tons ? 'border-tc-orange bg-orange-50' : 'border-gray-300'}`}>
                       <div className="font-semibold">{preset.name}</div>
-                      <div className="text-gray-500">{preset.tons} tons</div>
+                      <div className="text-gray-500">{preset.tons} tons · ${preset.rate}/hr</div>
                     </button>
                   ))}
                 </div>
