@@ -329,17 +329,18 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
     // ============================================
     // TRUCK RATE CALCULATOR
     // ============================================
-    const TruckRateCalculator = ({ isOpen, onClose, onApply }) => {
-      const [hourlyRate, setHourlyRate] = useState('125');
-      const [tolls, setTolls] = useState('0');
-      const [travelTime, setTravelTime] = useState('30');
-      const [loadingTime, setLoadingTime] = useState('5');
-      const [unloadingTime, setUnloadingTime] = useState('5');
-      const [truckCapacityTons, setTruckCapacityTons] = useState('21');
-      const [materialDensity, setMaterialDensity] = useState('1.4');
-      const [roundTrips, setRoundTrips] = useState('3');
-      const [description, setDescription] = useState('Trucking / Hauling');
-      const [outputUnit, setOutputUnit] = useState('Tons');
+    const TruckRateCalculator = ({ isOpen, onClose, onApply, initialValues }) => {
+      const iv = initialValues || {};
+      const [hourlyRate, setHourlyRate] = useState(iv.hourlyRate ?? '125');
+      const [tolls, setTolls] = useState(iv.tolls ?? '0');
+      const [travelTime, setTravelTime] = useState(iv.travelTime ?? '30');
+      const [loadingTime, setLoadingTime] = useState(iv.loadingTime ?? '5');
+      const [unloadingTime, setUnloadingTime] = useState(iv.unloadingTime ?? '5');
+      const [truckCapacityTons, setTruckCapacityTons] = useState(iv.truckCapacityTons ?? '21');
+      const [materialDensity, setMaterialDensity] = useState(iv.materialDensity ?? '1.4');
+      const [roundTrips, setRoundTrips] = useState(iv.roundTrips ?? '3');
+      const [description, setDescription] = useState(iv.description ?? 'Trucking / Hauling');
+      const [outputUnit, setOutputUnit] = useState(iv.outputUnit ?? 'Tons');
 
       // ── Map Out Haul state ──
       const [showMapPanel, setShowMapPanel] = useState(false);
@@ -446,12 +447,13 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
       const selectedCost = outputUnit === 'CY' ? results.costPerCY : results.costPerTon;
 
       const handleApply = () => {
-        onApply({ 
-          costPerUnit: parseFloat(selectedCost), 
+        onApply({
+          costPerUnit: parseFloat(selectedCost),
           unit: outputUnit,
           description: description || `Trucking - ${travelTime} min each way`,
-          timestamp: Date.now()
-        }); 
+          timestamp: Date.now(),
+          calcInputs: { hourlyRate, tolls, travelTime, loadingTime, unloadingTime, truckCapacityTons, materialDensity, roundTrips, outputUnit, description }
+        });
         onClose();
       };
 
@@ -1080,10 +1082,10 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
         onUpdate(index, { ...item, markupPct: markup, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
       };
 
-      const handleHaulApply = ({ costPerUnit, unit: haulUnit }) => {
+      const handleHaulApply = ({ costPerUnit, unit: haulUnit, calcInputs }) => {
         const base = item.materialBasePrice !== undefined ? item.materialBasePrice : (item.priceEach || 0);
         const newPriceEach = calcPriceEach(base, costPerUnit, item.markupPct);
-        onUpdate(index, { ...item, materialBasePrice: base, haulPerUnit: costPerUnit, haulUnit, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
+        onUpdate(index, { ...item, materialBasePrice: base, haulPerUnit: costPerUnit, haulUnit, haulCalcInputs: calcInputs || null, priceEach: newPriceEach, priceTotal: item.quantity * newPriceEach });
         setShowCalc(false);
       };
 
@@ -1176,7 +1178,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             )}
           </div>
 
-          {showCalc && <TruckRateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} onApply={handleHaulApply} />}
+          {showCalc && <TruckRateCalculator isOpen={showCalc} onClose={() => setShowCalc(false)} onApply={handleHaulApply} initialValues={item.haulCalcInputs} />}
         </div>
       );
     };
