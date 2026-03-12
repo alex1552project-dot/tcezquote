@@ -1425,7 +1425,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
                   {displayItems.map((item, idx) => (
                     <tr key={idx}><td className="border p-1.5">{item.description}</td><td className="border p-1.5 text-center">{item.quantity?.toLocaleString()}</td><td className="border p-1.5 text-center">{item.unit}</td><td className="border p-1.5 text-right">{formatCurrency(item.priceEach)}</td><td className="border p-1.5 text-right">{formatCurrency(item.priceTotal)}</td></tr>
                   ))}
-                  <tr className="bg-gray-100 font-bold"><td colSpan="4" className="border p-1.5 text-right">SUBTOTAL:</td><td className="border p-1.5 text-right">{formatCurrency(displaySubtotal)}</td></tr>
+                  <tr className="bg-gray-100 font-bold"><td colSpan="4" className="border p-1.5 text-right">TOTAL:</td><td className="border p-1.5 text-right whitespace-nowrap">{formatCurrency(displaySubtotal)}</td></tr>
                 </tbody>
               </table>
               {quote.scopeOfWork && <div className="mb-4"><p className="font-bold text-xs">Scope of Work:</p><p className="text-xs whitespace-pre-wrap">{quote.scopeOfWork}</p></div>}
@@ -1593,7 +1593,7 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
             {formData.lineItems.length > 0 && (
               <div className="flex justify-end mt-4 pt-4 border-t-2 border-gray-200">
                 <div className="text-right">
-                  <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Quote Subtotal</span>
+                  <span className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Quote Total</span>
                   <div className="text-3xl font-extrabold text-tc-blue mt-1">{formatCurrency(subtotal)}</div>
                 </div>
               </div>
