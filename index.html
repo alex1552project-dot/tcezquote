@@ -1326,6 +1326,9 @@ Terms are Net 30, unless other arrangements are made and agreed upon in writing.
                   <div className="border-b p-2"><strong>Delivery:</strong> {quote.deliveryMethod}</div>
                   <div className="border-r p-2"><strong>Project:</strong> {quote.projectName}</div>
                   <div className="p-2"><strong>Terms:</strong> {quote.paymentTerms}</div>
+                  {quote.projectAddress && (
+                    <div className="col-span-2 border-t p-2"><strong>Project Address:</strong> {quote.projectAddress}</div>
+                  )}
                 </div>
               </div>
               <table className="w-full border text-xs mb-4">
